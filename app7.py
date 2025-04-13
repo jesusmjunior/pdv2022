@@ -55,7 +55,7 @@ def autenticar_usuario():
     st.title("🔐 Login - ORION PDV")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("https://i.imgur.com/Ka8kNST.png", width=200)
+        st.image("https://drive.google.com/file/d/12XF47mD3ibrkubkj5LcRdosO2mn-4aIy/view?usp=sharing", width=200)
     
     usuario = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
