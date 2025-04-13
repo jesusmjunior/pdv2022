@@ -192,8 +192,13 @@ def render_painel():
     st.header("📈 Painel de Vendas")
 
     try:
-        venda_df = pd.read_csv(URL_VENDA)
-        venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
+       venda_df = pd.read_csv(URL_VENDA)
+
+if "DATA" in venda_df.columns:
+    venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
+else:
+    venda_df["DATA"] = pd.to_datetime([])  # Garante que existe a coluna mesmo vazia
+
     except:
         venda_df = pd.DataFrame(columns=["DATA", "ID_CLIENTE", "ID_FORMA_PGTO", "TOTAL"])
 
