@@ -410,18 +410,17 @@ def render_registro_venda():
             st.session_state.carrinho = []
             st.success("Venda concluída!")
 def render_painel():
-    st.header("📈 Painel de Vendas")
-    
-    try:
-        venda_df = pd.read_csv(URL_VENDA)
-    except:
-        venda_df = pd.DataFrame()
+    st.header("📈 Painel de Vendas")    
+   try:
+    venda_df = pd.read_csv(URL_VENDA)
+except:
+    venda_df = pd.DataFrame(columns=["DATA", "ID_CLIENTE", "ID_FORMA_PGTO", "TOTAL"])
 
-    # Verificação e correção da coluna DATA
-    if "DATA" in venda_df.columns:
-        venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
-    else:
-        venda_df["DATA"] = pd.to_datetime([])
+# Fora do try: garantir que a coluna DATA seja datetime
+if "DATA" in venda_df.columns:
+    venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
+else:
+    venda_df["DATA"] = pd.to_datetime([])
 
     # Combina com vendas locais
     if st.session_state.vendas_db:
