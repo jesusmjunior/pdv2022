@@ -794,7 +794,7 @@ def configuracoes_sistema():
             email = st.text_input("Email")
         
         # Logo
-        logo_url = st.text_input("URL da Logo", value="https://i.imgur.com/Ka8kNST.png")
+        logo_url = st.text_input("URL da Logo", value="https://github.com/jesusmjunior/pdv2022/blob/69ff7f9ecaa6209d10cec3ea589f803b56180c32/logo.webp")
         
         if st.form_submit_button("Salvar Configurações"):
             # Aqui você salvaria em um estado de sessão ou banco de dados
