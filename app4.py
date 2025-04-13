@@ -243,12 +243,9 @@ def render_painel():
 def main():
     st.sidebar.image("https://i.imgur.com/Ka8kNST.png", width=200)
     st.sidebar.title("🧭 Navegação")
-    menu = st.sidebar.radio("Escolha uma opção:", [
-        "Registrar Venda",
-        "Cadastro de Produto",
-        "Painel Financeiro"
-    ])
-
+  menu = st.sidebar.radio("Escolha uma opção:", [
+    "Registrar Venda", "Cadastro de Produto", "Painel Financeiro"
+], key="menu_navegacao")
     if menu == "Registrar Venda":
         render_registro_venda()
     elif menu == "Cadastro de Produto":
