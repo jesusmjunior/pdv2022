@@ -267,7 +267,6 @@ from PIL import Image
 import base64
 import re
 
-st.set_page_config(page_title="ORION PDV", layout="wide")
 
 # URLs externas (substitua pelas reais)
 URL_CLIENTE = "https://docs.google.com/spreadsheets/d/e/2PACX-.../output=csv"
