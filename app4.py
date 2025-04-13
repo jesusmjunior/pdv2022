@@ -409,15 +409,21 @@ def render_registro_venda():
             st.components.v1.html(html, height=600)
             st.session_state.carrinho = []
             st.success("Venda concluída!")
-
 def render_painel():
     st.header("📈 Painel de Vendas")
+    
     try:
         venda_df = pd.read_csv(URL_VENDA)
-        venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
     except:
-        venda_df = pd.DataFrame(columns=["DATA", "ID_CLIENTE", "ID_FORMA_PGTO", "TOTAL"])
+        venda_df = pd.DataFrame()
 
+    # Verificação e correção da coluna DATA
+    if "DATA" in venda_df.columns:
+        venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
+    else:
+        venda_df["DATA"] = pd.to_datetime([])
+
+    # Combina com vendas locais
     if st.session_state.vendas_db:
         locais_df = pd.DataFrame([{
             "DATA": pd.to_datetime(v["data"]),
@@ -427,33 +433,22 @@ def render_painel():
         } for v in st.session_state.vendas_db])
         venda_df = pd.concat([venda_df, locais_df], ignore_index=True)
 
+    # Filtros
     col1, col2 = st.columns(2)
     with col1:
         data_inicio = st.date_input("Data Inicial", value=datetime.today().replace(day=1))
     with col2:
         data_fim = st.date_input("Data Final", value=datetime.today())
 
-    forma_pgto = st.selectbox("Forma de Pagamento", ["Todas"] + list(venda_df["ID_FORMA_PGTO"].dropna().unique()))
+    forma_pgto = st.selectbox("Forma de Pagamento", ["Todas"] + list(venda_df["ID_FORMA_PGTO"].dropna().unique()) if "ID_FORMA_PGTO" in venda_df else ["Todas"])
+
     filtro = (venda_df["DATA"].dt.date >= data_inicio) & (venda_df["DATA"].dt.date <= data_fim)
     if forma_pgto != "Todas":
         filtro &= venda_df["ID_FORMA_PGTO"] == forma_pgto
 
     df = venda_df[filtro]
     st.metric("💰 Total no Período", f"R$ {df['TOTAL'].sum():,.2f}")
-    st.bar_chart(df.groupby("ID_FORMA_PGTO")["TOTAL"].sum())
+    st.bar_chart(df.groupby("ID_FORMA_PGTO")["TOTAL"].sum() if "ID_FORMA_PGTO" in df else df)
     st.line_chart(df.groupby(df["DATA"].dt.date)["TOTAL"].sum())
-
-def main():
-    st.sidebar.image("https://i.imgur.com/Ka8kNST.png", width=150)
-    st.sidebar.title("🧭 Menu")
-    pagina = st.sidebar.radio("Acessar:", ["Registrar Venda", "Cadastro de Produto", "Painel Financeiro"])
-
-    if pagina == "Registrar Venda":
-        render_registro_venda()
-    elif pagina == "Cadastro de Produto":
-        render_cadastro_produto()
-    elif pagina == "Painel Financeiro":
-        render_painel()
-
 if __name__ == "__main__":
     main()
