@@ -241,18 +241,21 @@ def render_painel():
 
 # Página principal
 def main():
-    st.sidebar.image("https://i.imgur.com/Ka8kNST.png", width=200)
-    st.sidebar.title("🧭 Navegação")
-  menu = st.sidebar.radio("Escolha uma opção:", [
-    "Registrar Venda", "Cadastro de Produto", "Painel Financeiro"
-], key="menu_navegacao")
+    st.sidebar.image("https://i.imgur.com/Ka8kNST.png", width=150)
+    st.sidebar.title("🧭 Menu")
+
+    menu = st.sidebar.radio("Escolha uma opção:", [
+        "Registrar Venda",
+        "Cadastro de Produto",
+        "Painel Financeiro"
+    ], key="menu_navegacao")
+
     if menu == "Registrar Venda":
         render_registro_venda()
     elif menu == "Cadastro de Produto":
         render_cadastro_produto()
     elif menu == "Painel Financeiro":
         render_painel()
-
 # Execução principal
 if __name__ == "__main__":
     main()
