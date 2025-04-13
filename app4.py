@@ -239,7 +239,6 @@ def render_painel():
     if not df.empty:
         st.line_chart(df.groupby(df["DATA"].dt.date)["TOTAL"].sum())
 
-
 # Página principal
 def main():
     st.sidebar.image("https://i.imgur.com/Ka8kNST.png", width=200)
@@ -260,20 +259,6 @@ def main():
 # Execução principal
 if __name__ == "__main__":
     main()
-import streamlit as st
-import pandas as pd
-from datetime import datetime
-from PIL import Image
-import base64
-import re
-
-
-# URLs externas (substitua pelas reais)
-URL_CLIENTE = "https://docs.google.com/spreadsheets/d/e/2PACX-.../output=csv"
-URL_PGTO = "https://docs.google.com/spreadsheets/d/e/2PACX-.../output=csv"
-URL_VENDA = "https://docs.google.com/spreadsheets/d/e/2PACX-.../output=csv"
-URL_GRUPO = "https://docs.google.com/spreadsheets/d/e/2PACX-.../output=csv"
-URL_MARCAS = "https://docs.google.com/spreadsheets/d/e/2PACX-.../output=csv"
 
 # Sessão
 for key in ['produtos_db', 'vendas_db', 'carrinho', 'ultimo_codigo']:
