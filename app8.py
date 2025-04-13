@@ -7,7 +7,7 @@ import re
 from PIL import Image
 
 # Configuração da página
-st.set_page_config(page_title="ORION PDV", layout="wide")
+st.set_page_config(page_title="ORION PDV-ADM. JESUS MARTINS & ORION I.A.", layout="wide")
 
 # URLs dos dados externos (do app2)
 URL_GRUPO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=528868130&single=true&output=csv"
@@ -875,7 +875,7 @@ def sobre():
     - Pandas
     - Google Sheets (para integração de dados)
     
-    © 2025 - Todos os direitos reservados
+    © 2025 - Todos os direitos reservados- ADM. JESUS MARTINS OLIVEIRA JUNIOR 
     """)
     
     st.divider()
