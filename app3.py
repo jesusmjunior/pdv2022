@@ -592,7 +592,8 @@ def render_registro_venda():
         
         # Área de finalização
         st.subheader("Finalizar Venda")
-       with st.form("form_venda_final"):
+
+with st.form("form_venda_final"):
     st.markdown("### Finalizar Venda")
     forma_pagamento = st.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "Pix"])
     confirmar = st.form_submit_button("💾 Confirmar Venda")
@@ -600,9 +601,10 @@ def render_registro_venda():
     if confirmar:
         st.success("✅ Venda finalizada com sucesso!")
         st.session_state["ultima_venda"] = {
-            "produto": produto["nome"],
-            "quantidade": qtd,
-            "valor_unitario": produto["preco"],
-            "total": qtd * produto["preco"],
+            "produto": item["produto"],
+            "quantidade": item["quantidade"],
+            "valor_unitario": item["preco_unit"],
+            "total": item["total"],
             "forma": forma_pagamento
         }
+        st.session_state["carrinho"] = []
