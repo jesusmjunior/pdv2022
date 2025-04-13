@@ -97,10 +97,10 @@ def extrair_codigo_barras(texto):
 
 # Função para autenticar usuário (mantendo o visual do app7 com a lógica do app2)
 def autenticar_usuario():
-    st.title("🔐 Login - ORION PDV")
+    st.title("🔐 Login - ORION ADM. JESUS MARTINS O. JR. PDV")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("https://drive.google.com/file/d/12XF47mD3ibrkubkj5LcRdosO2mn-4aIy/view?usp=sharing", width=200)
+        st.image("https://github.com/jesusmjunior/pdv2022/blob/69ff7f9ecaa6209d10cec3ea589f803b56180c32/logo.webp", width=200)
     
     usuario = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
