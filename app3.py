@@ -592,10 +592,7 @@ def render_registro_venda():
         
         # Área de finalização
         st.subheader("Finalizar Venda")
-        with st.form("form_
-
-
-with st.form("form_venda_final"):
+       with st.form("form_venda_final"):
     st.markdown("### Finalizar Venda")
     forma_pagamento = st.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "Pix"])
     confirmar = st.form_submit_button("💾 Confirmar Venda")
