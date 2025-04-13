@@ -11,7 +11,7 @@ import io
 # Configuração da página
 st.set_page_config(page_title="ORION PDV", layout="wide", initial_sidebar_state="collapsed")
 
-# URLs dos dados externos (do app2.py)
+# URLs dos dados externos
 URL_GRUPO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=528868130&single=true&output=csv"
 URL_MARCAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=832596780&single=true&output=csv"
 URL_CLIENTE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1645177762&single=true&output=csv"
@@ -60,7 +60,7 @@ if 'carrinho' not in st.session_state:
 if 'ultimo_codigo' not in st.session_state:
     st.session_state.ultimo_codigo = None
 
-# Função para autenticar usuário (do app2.py)
+# Função para autenticar usuário
 def autenticar_usuario():
     # Dados de autenticação
     USUARIOS = {
@@ -100,7 +100,7 @@ def extrair_codigo(texto):
     return ''.join(numeros) if len(''.join(numeros)) >= 8 else None
 
 def gerar_recibo_html(venda):
-    """Generate HTML receipt for a sale (do app5.py)"""
+    """Generate HTML receipt for a sale"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Recibo</title>
@@ -271,7 +271,7 @@ def leitor_codigo_barras():
 
 # Módulo: Cadastro de Produto
 def render_cadastro_produto():
-    """Product registration form (combination of app2 and app5)"""
+    """Product registration form"""
     st.header("📦 Cadastro de Produto")
 
     try:
@@ -405,7 +405,7 @@ def render_cadastro_cliente():
         st.subheader("Clientes Cadastrados")
         st.dataframe(clientes_df)
 
-# Módulo: Registro de Venda (combinando app2 e app5)
+# Módulo: Registro de Venda
 def render_registro_venda():
     """Sales registration interface with HTML receipt generation"""
     st.header("🧾 Registrar Venda")
@@ -415,4 +415,236 @@ def render_registro_venda():
         forma_pgto_df = pd.read_csv(URL_PGTO)
     except Exception as e:
         st.warning(f"Não foi possível carregar dados externos: {e}")
-        cliente_
+        cliente_df = pd.DataFrame(columns=["ID", "NOME"])
+        forma_pgto_df = pd.DataFrame(columns=["ID", "DESCRICAO"])
+
+    # Seção para adicionar itens ao carrinho
+    st.subheader("Adicionar Produtos")
+    
+    # Usar o leitor de código de barras
+    codigo_barras = leitor_codigo_barras()
+    
+    # Se temos um código válido, mostrar opções de quantidade
+    if codigo_barras and codigo_barras in st.session_state.produtos_db:
+        produto = st.session_state.produtos_db[codigo_barras]
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            qtd = st.number_input("Quantidade", min_value=1, max_value=produto['estoque'], value=1)
+        
+        with col2:
+            if st.button("Adicionar ao Carrinho", type="primary"):
+                st.session_state.carrinho.append({
+                    "codigo_barras": produto['codigo_barras'],
+                    "produto": produto['nome'],
+                    "quantidade": qtd,
+                    "preco_unit": produto['preco'],
+                    "total": qtd * produto['preco'],
+                    "foto": produto.get('foto')
+                })
+                st.success(f"{qtd}x {produto['nome']} adicionado ao carrinho!")
+                st.session_state.ultimo_codigo = None
+                st.rerun()
+
+    # Exibir carrinho
+    st.subheader("🛒 Carrinho")
+    
+    if not st.session_state.carrinho:
+        st.info("Carrinho vazio")
+    else:
+        total_venda = 0
+        for i, item in enumerate(st.session_state.carrinho):
+            cols = st.columns([1, 3, 1, 1])
+            
+            with cols[0]:
+                if item.get('foto'):
+                    st.image(item['foto'], width=80)
+            
+            with cols[1]:
+                st.write(f"**{item['produto']}**")
+                st.write(f"Qtd: {item['quantidade']} x R$ {item['preco_unit']:.2f}")
+            
+            with cols[2]:
+                st.write(f"**R$ {item['total']:.2f}**")
+            
+            with cols[3]:
+                if st.button("❌", key=f"rem_{i}"):
+                    st.session_state.carrinho.pop(i)
+                    st.rerun()
+            
+            total_venda += item['total']
+            st.divider()
+        
+        st.markdown(f"### Total da Venda: R$ {total_venda:.2f}")
+        
+        # Seção para finalizar venda
+        with st.expander("Finalizar Venda", expanded=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                cliente = st.selectbox("Cliente", 
+                                     options=["Cliente Padrão"] + list(cliente_df["NOME"].unique()))
+            
+            with col2:
+                forma_pgto = st.selectbox("Forma de Pagamento", 
+                                        options=["Dinheiro", "Cartão", "Pix"] + list(forma_pgto_df["DESCRICAO"].unique()))
+            
+            if st.button("Finalizar Venda", type="primary"):
+                if not st.session_state.carrinho:
+                    st.error("Adicione produtos ao carrinho antes de finalizar")
+                else:
+                    # Registrar venda
+                    venda = {
+                        "cliente": cliente,
+                        "forma_pgto": forma_pgto,
+                        "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "itens": st.session_state.carrinho.copy(),
+                        "total": total_venda
+                    }
+                    
+                    # Adicionar ao histórico de vendas
+                    st.session_state.vendas_db.append(venda)
+                    
+                    # Gerar recibo
+                    html = gerar_recibo_html(venda)
+                    
+                    # Mostrar recibo
+                    st.components.v1.html(html, height=600)
+                    
+                    # Botão para download
+                    st.download_button(
+                        label="📄 Baixar Recibo",
+                        data=html,
+                        file_name="recibo.html",
+                        mime="text/html"
+                    )
+                    
+                    # Limpar carrinho
+                    st.session_state.carrinho = []
+                    st.success("Venda registrada com sucesso!")
+                    st.balloons()
+
+# Módulo: Painel Financeiro
+def render_painel_financeiro():
+    """Financial dashboard with sales analytics"""
+    st.header("📊 Painel Financeiro")
+    
+    try:
+        vendas_df = pd.read_csv(URL_VENDA)
+    except Exception as e:
+        st.warning(f"Não foi possível carregar dados externos: {e}")
+        vendas_df = pd.DataFrame(columns=["DATA", "ID_CLIENTE", "ID_FORMA_PGTO", "TOTAL"])
+    
+    # Combinar com vendas locais
+    if st.session_state.vendas_db:
+        locais_df = pd.DataFrame([{
+            "DATA": pd.to_datetime(v["data"]),
+            "ID_CLIENTE": v["cliente"],
+            "ID_FORMA_PGTO": v["forma_pgto"],
+            "TOTAL": v["total"]
+        } for v in st.session_state.vendas_db])
+        
+        vendas_df = pd.concat([vendas_df, locais_df], ignore_index=True)
+    
+    # Verificar se temos dados para mostrar
+    if vendas_df.empty:
+        st.info("Nenhum dado de venda disponível")
+        return
+    
+    # Converter coluna de data
+    vendas_df["DATA"] = pd.to_datetime(vendas_df["DATA"])
+    
+    # Filtros
+    st.subheader("Filtros")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        data_inicio = st.date_input("Data inicial", 
+                                  value=datetime.now().replace(day=1))
+    
+    with col2:
+        data_fim = st.date_input("Data final", 
+                                value=datetime.now())
+    
+    with col3:
+        formas_pgto = ["Todas"] + list(vendas_df["ID_FORMA_PGTO"].unique())
+        forma_selecionada = st.selectbox("Forma de pagamento", formas_pgto)
+    
+    # Aplicar filtros
+    vendas_filtradas = vendas_df[
+        (vendas_df["DATA"].dt.date >= data_inicio) & 
+        (vendas_df["DATA"].dt.date <= data_fim)
+    ]
+    
+    if forma_selecionada != "Todas":
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["ID_FORMA_PGTO"] == forma_selecionada]
+    
+    # Métricas
+    st.subheader("Métricas")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total de Vendas", f"R$ {vendas_filtradas['TOTAL'].sum():,.2f}")
+    
+    with col2:
+        st.metric("Número de Vendas", len(vendas_filtradas))
+    
+    with col3:
+        ticket_medio = vendas_filtradas['TOTAL'].mean() if len(vendas_filtradas) > 0 else 0
+        st.metric("Ticket Médio", f"R$ {ticket_medio:,.2f}")
+    
+    # Gráficos
+    st.subheader("Análise de Vendas")
+    
+    tab1, tab2, tab3 = st.tabs(["Por Dia", "Por Forma de Pagamento", "Detalhes"])
+    
+    with tab1:
+        # Vendas por dia
+        vendas_por_dia = vendas_filtradas.groupby(vendas_filtradas["DATA"].dt.date)["TOTAL"].sum()
+        st.line_chart(vendas_por_dia)
+    
+    with tab2:
+        # Vendas por forma de pagamento
+        vendas_por_pgto = vendas_filtradas.groupby("ID_FORMA_PGTO")["TOTAL"].sum()
+        st.bar_chart(vendas_por_pgto)
+    
+    with tab3:
+        # Tabela detalhada
+        st.dataframe(vendas_filtradas)
+
+# Página principal
+def main():
+    # Verificar autenticação
+    if "autenticado" not in st.session_state:
+        autenticar_usuario()
+        return
+    
+    # Menu lateral
+    st.sidebar.image("https://i.imgur.com/Ka8kNST.png", width=150)
+    st.sidebar.title(f"Bem-vindo, {st.session_state.usuario}")
+    
+    opcao = st.sidebar.radio(
+        "Menu",
+        ["Registrar Venda", "Cadastro de Produto", "Cadastro de Cliente", "Painel Financeiro"],
+        key="menu_principal"
+    )
+    
+    # Navegação
+    if opcao == "Registrar Venda":
+        render_registro_venda()
+    elif opcao == "Cadastro de Produto":
+        render_cadastro_produto()
+    elif opcao == "Cadastro de Cliente":
+        render_cadastro_cliente()
+    elif opcao == "Painel Financeiro":
+        render_painel_financeiro()
+    
+    # Logout
+    st.sidebar.divider()
+    if st.sidebar.button("Sair", type="primary"):
+        del st.session_state["autenticado"]
+        st.rerun()
+
+if __name__ == "__main__":
+    main()
