@@ -1,9 +1,11 @@
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 from PIL import Image
 import base64
 import re
+import uuid
 
 st.set_page_config(page_title="ORION PDV", layout="wide")
 
@@ -15,6 +17,10 @@ URL_GRUPO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0...output=csv"
 URL_MARCAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0...output=csv"
 
 # Sessão
+# Sessão
+for key in ['produtos_db', 'vendas_db', 'carrinho', 'ultimo_codigo']:
+    if key not in st.session_state:
+        st.session_state[key] = [] if 'db' in key or key == 'carrinho' else None
 if 'produtos_db' not in st.session_state:
     st.session_state.produtos_db = {}
 
@@ -26,7 +32,6 @@ if 'carrinho' not in st.session_state:
 
 if 'ultimo_codigo' not in st.session_state:
     st.session_state.ultimo_codigo = None
-
 # Utilitários
 def extrair_codigo(texto):
     numeros = re.findall(r'\d+', texto)
@@ -35,19 +40,19 @@ def extrair_codigo(texto):
 def gerar_recibo_html(venda):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
-    <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Recibo</title>
+    <!DOCTYPE html><html><head><meta charset='UTF-8'><title>Recibo</title>
     <style>
         body {{ font-family: monospace; max-width: 600px; margin: auto; }}
         .linha {{ border-top: 1px dashed #000; margin: 10px 0; }}
         button {{ margin-top: 20px; }}
     </style></head><body>
     <h2>🧾 ORION PDV - CUPOM ELETRÔNICO</h2>
-    <div class="linha"></div>
+    <div class='linha'></div>
     <p><strong>Data:</strong> {venda['data']}</p>
     <p><strong>Cliente:</strong> {venda['cliente']}</p>
     <p><strong>Pagamento:</strong> {venda['forma_pgto']}</p>
-    <div class="linha"></div>
-    <table width="100%">
+    <div class='linha'></div>
+    <table width='100%'>
         <thead><tr><th>Produto</th><th>Qtd</th><th>Unit</th><th>Total</th></tr></thead>
         <tbody>
     """
@@ -55,12 +60,12 @@ def gerar_recibo_html(venda):
         html += f"<tr><td>{item['produto']}</td><td>{item['quantidade']}</td><td>R$ {item['preco_unit']:.2f}</td><td>R$ {item['total']:.2f}</td></tr>"
     html += f"""
         </tbody></table>
-        <div class="linha"></div>
+        <div class='linha'></div>
         <h4>Total da Venda: R$ {venda['total']:.2f}</h4>
-        <div class="linha"></div>
+        <div class='linha'></div>
         <p>Obrigado pela preferência!</p>
         <p><small>Gerado em: {timestamp}</small></p>
-        <button onclick="window.print()">🖨️ Imprimir</button>
+        <button onclick='window.print()'>🖨️ Imprimir</button>
     </body></html>
     """
     return html
@@ -243,12 +248,13 @@ def render_painel():
 def main():
     st.sidebar.image("https://i.imgur.com/Ka8kNST.png", width=150)
     st.sidebar.title("🧭 Menu")
-
     menu = st.sidebar.radio("Escolha uma opção:", [
         "Registrar Venda",
         "Cadastro de Produto",
         "Painel Financeiro"
-    ], key="menu_navegacao")
+    ], key=f"menu_navegacao_{str(uuid.uuid4())[:8]}")
+
+    st.write("Você selecionou:", menu)
 
     if menu == "Registrar Venda":
         render_registro_venda()
