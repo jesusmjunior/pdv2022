@@ -6,7 +6,7 @@ import io
 from PIL import Image
 import base64
 import re
-import json
+import streamlit.components.v1 as components
 
 # Configuração inicial
 st.set_page_config(page_title="ORION PDV", layout="wide", initial_sidebar_state="collapsed")
@@ -19,7 +19,7 @@ URL_PRODUTO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZw
 URL_PGTO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1061064660&single=true&output=csv"
 URL_VENDA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1817416820&single=true&output=csv"
 
-# Inicialização do estado da sessão
+# Banco de dados simulado de produtos
 if 'produtos_db' not in st.session_state:
     st.session_state.produtos_db = {
         '7891000315507': {
@@ -27,27 +27,42 @@ if 'produtos_db' not in st.session_state:
             'codigo_barras': '7891000315507',
             'grupo': 'Laticínios',
             'marca': 'Ninho',
-            'preco': 5.99,
+            'preco_venda': 5.99,
+            'preco_custo': 4.20,
+            'margem': 30.0,
+            'imposto': 12.0,
             'estoque': 50,
-            'foto': "https://www.nestleprofessional.com.br/sites/default/files/styles/np_product_detail/public/2022-09/leite-em-po-ninho-integral-lata-400g.png"
+            'localizacao': 'Gôndola A3',
+            'foto': "https://www.nestleprofessional.com.br/sites/default/files/styles/np_product_detail/public/2022-09/leite-em-po-ninho-integral-lata-400g.png",
+            'foto_base64': ""
         },
         '7891910000197': {
             'nome': 'Arroz',
             'codigo_barras': '7891910000197',
             'grupo': 'Grãos',
             'marca': 'Tio João',
-            'preco': 22.90,
+            'preco_venda': 22.90,
+            'preco_custo': 18.50,
+            'margem': 19.2,
+            'imposto': 8.5,
             'estoque': 35,
-            'foto': "https://m.media-amazon.com/images/I/61l6ojQQtDL._AC_UF894,1000_QL80_.jpg"
+            'localizacao': 'Gôndola B1',
+            'foto': "https://m.media-amazon.com/images/I/61l6ojQQtDL._AC_UF894,1000_QL80_.jpg",
+            'foto_base64': ""
         },
         '7891149410116': {
             'nome': 'Café',
             'codigo_barras': '7891149410116',
             'grupo': 'Bebidas',
             'marca': 'Pilão',
-            'preco': 15.75,
+            'preco_venda': 15.75,
+            'preco_custo': 10.80,
+            'margem': 31.4,
+            'imposto': 9.0,
             'estoque': 28,
-            'foto': "https://m.media-amazon.com/images/I/51xq5MnKz4L._AC_UF894,1000_QL80_.jpg"
+            'localizacao': 'Gôndola C4',
+            'foto': "https://m.media-amazon.com/images/I/51xq5MnKz4L._AC_UF894,1000_QL80_.jpg",
+            'foto_base64': ""
         }
     }
 
@@ -74,6 +89,13 @@ def extrair_codigo_barras(texto):
         return codigo_extraido
     
     return None
+
+# Função para calcular margem e preço de venda
+def calcular_margem_preco(preco_custo, margem, imposto=0):
+    fator_markup = 1.0 + (margem / 100.0)
+    fator_imposto = 1.0 + (imposto / 100.0)
+    preco_venda = preco_custo * fator_markup * fator_imposto
+    return round(preco_venda, 2)
 
 # Função de reconhecimento de texto via OCR Web
 def reconhecer_texto_imagem():
@@ -181,9 +203,14 @@ def leitor_codigo_barras():
         with col1:
             if produto['foto']:
                 st.image(produto['foto'], width=150)
+            elif produto['foto_base64']:
+                img_data = base64.b64decode(produto['foto_base64'])
+                img = Image.open(BytesIO(img_data))
+                st.image(img, width=150)
         with col2:
             st.subheader(produto['nome'])
-            st.write(f"**Preço:** R$ {produto['preco']:.2f}")
+            st.write(f"**Preço:** R$ {produto['preco_venda']:.2f}")
+            st.write(f"**Localização:** {produto['localizacao']}")
             st.write(f"**Estoque:** {produto['estoque']} unidades")
     elif codigo_selecionado:
         st.warning(f"Código {codigo_selecionado} não encontrado no cadastro.")
@@ -215,7 +242,6 @@ def mostrar_instrucoes_scanner():
     """)
     
     # Adicionando QR Code para abrir esta aplicação no celular
-    # (substituir pelo seu URL real quando deployed)
     app_url = "https://pdvoliveira.streamlit.app" 
     st.markdown(f"""
     <div style="text-align: center; margin: 20px 0;">
@@ -224,50 +250,35 @@ def mostrar_instrucoes_scanner():
     </div>
     """, unsafe_allow_html=True)
 
-# Função para gerar o HTML do cupom fiscal
-def gerar_cupom_html(venda):
-    html_template = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Cupom Eletrônico</title>
-        <style>
-            body { font-family: monospace; }
-            .cupom { max-width: 300px; margin: auto; padding: 10px; border: 1px dashed #000; }
-            .center { text-align: center; }
-            .linha { border-top: 1px dashed #000; margin: 10px 0; }
-            button { margin-top: 20px; padding: 5px 15px; }
-        </style>
-    </head>
-    <body>
-        <div class="cupom">
-            <div class="center">
-                <h3>ORION PDV</h3>
-                <p>🧾 CUPOM ELETRÔNICO</p>
-            </div>
-            <div class="linha"></div>
-            <p><strong>Produto:</strong> {produto}</p>
-            <p><strong>Qtd:</strong> {quantidade}</p>
-            <p><strong>Unitário:</strong> R$ {valor_unitario:.2f}</p>
-            <p><strong>Total:</strong> R$ {total:.2f}</p>
-            <p><strong>Pagamento:</strong> {forma}</p>
-            <div class="linha"></div>
-            <p class="center">Obrigado pela preferência!</p>
-        </div>
-        <div class="center">
-            <button onclick="window.print()">🖨️ Imprimir</button>
-        </div>
-    </body>
-    </html>
-    """
+# Função para buscar produtos por nome, grupo ou código
+def buscar_produto(termo_busca, tipo_busca="codigo"):
+    if not termo_busca:
+        return None
     
-    return html_template.format(
-        produto=venda["produto"],
-        quantidade=venda["quantidade"],
-        valor_unitario=venda["valor_unitario"],
-        total=venda["total"],
-        forma=venda["forma"]
-    )
+    # Busca por código de barras (exato)
+    if tipo_busca == "codigo":
+        if termo_busca in st.session_state.produtos_db:
+            return st.session_state.produtos_db[termo_busca]
+    
+    # Busca por nome (parcial)
+    elif tipo_busca == "nome":
+        for codigo, produto in st.session_state.produtos_db.items():
+            if termo_busca.lower() in produto['nome'].lower():
+                return produto
+                
+    # Busca por grupo (parcial)
+    elif tipo_busca == "grupo":
+        for codigo, produto in st.session_state.produtos_db.items():
+            if termo_busca.lower() in produto['grupo'].lower():
+                return produto
+                
+    # Busca por localização (parcial)
+    elif tipo_busca == "localizacao":
+        for codigo, produto in st.session_state.produtos_db.items():
+            if termo_busca.lower() in produto['localizacao'].lower():
+                return produto
+                
+    return None
 
 # Função de cadastro de produto com suporte a código de barras e foto
 def render_cadastro_produto():
@@ -278,11 +289,10 @@ def render_cadastro_produto():
         marcas_df = pd.read_csv(URL_MARCAS)
     except Exception as e:
         st.error(f"Erro ao carregar dados de grupo/marcas: {e}")
-        grupo_df = pd.DataFrame({"DESCRICAO": ["Laticínios", "Grãos", "Bebidas", "Limpeza", "Higiene"]})
-        marcas_df = pd.DataFrame({"DESCRICAO": ["Ninho", "Tio João", "Pilão", "Ypê", "Dove"]})
+        return
 
-    # Aba para adicionar produto via código de barras ou câmera
-    tab1, tab2 = st.tabs(["Adicionar com Formulário", "Adicionar com Câmera"])
+    # Aba para adicionar produto via código de barras
+    tab1, tab2, tab3 = st.tabs(["Adicionar Produto", "Capturar Foto", "Consultar Produtos"])
     
     with tab1:
         with st.form("form_cad_produto"):
@@ -302,12 +312,26 @@ def render_cadastro_produto():
                 grupo = st.selectbox("Grupo", grupo_df["DESCRICAO"].dropna())
             with col2:
                 marca = st.selectbox("Marca", marcas_df["DESCRICAO"].dropna())
-                
+            
             col1, col2 = st.columns(2)
             with col1:
-                preco = st.number_input("Preço", min_value=0.0, step=0.01, format="%.2f")
+                localizacao = st.text_input("Localização na Gôndola", placeholder="Ex: Gôndola A3")
             with col2:
                 estoque = st.number_input("Estoque", min_value=0)
+            
+            # Campos para preço de custo, margem e imposto
+            st.subheader("Informações Financeiras")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                preco_custo = st.number_input("Preço de Custo (R$)", min_value=0.0, step=0.01, format="%.2f")
+            with col2:
+                margem = st.number_input("Margem de Lucro (%)", min_value=0.0, max_value=500.0, step=0.1, format="%.1f", value=30.0)
+            with col3:
+                imposto = st.number_input("Imposto (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.1f", value=9.0)
+            
+            # Calcular preço de venda automaticamente
+            preco_venda = calcular_margem_preco(preco_custo, margem, imposto)
+            st.success(f"Preço de Venda Calculado: R$ {preco_venda:.2f}")
             
             foto_url = st.text_input("URL da Foto do Produto", 
                                    placeholder="https://exemplo.com/imagem.jpg")
@@ -319,106 +343,116 @@ def render_cadastro_produto():
             enviar = st.form_submit_button("Salvar Produto")
             
             if enviar and codigo_barras and nome:
+                foto_base64 = ""
+                if "temp_foto_base64" in st.session_state:
+                    foto_base64 = st.session_state.temp_foto_base64
+                    
                 novo_produto = {
                     'nome': nome,
                     'codigo_barras': codigo_barras,
                     'grupo': grupo,
                     'marca': marca,
-                    'preco': preco,
+                    'preco_venda': preco_venda,
+                    'preco_custo': preco_custo,
+                    'margem': margem,
+                    'imposto': imposto,
                     'estoque': estoque,
-                    'foto': foto_url
+                    'localizacao': localizacao,
+                    'foto': foto_url,
+                    'foto_base64': foto_base64
                 }
                 
                 # Salvar no "banco de dados" local (session_state)
                 st.session_state.produtos_db[codigo_barras] = novo_produto
                 st.success(f"Produto '{nome}' cadastrado com sucesso!")
-                st.json(novo_produto)
+                
+                # Limpar foto temporária
+                if "temp_foto_base64" in st.session_state:
+                    del st.session_state.temp_foto_base64
     
     with tab2:
-        # Usando a funcionalidade de câmera integrada
-        st.markdown("#### 📸 Tire uma foto do produto (opcional)")
-        img_file = st.camera_input("Clique abaixo para capturar")
+        st.subheader("Capturar Foto do Produto")
+        img_file = st.camera_input("Tire uma foto do produto")
         
-        encoded_foto = None
         if img_file is not None:
             image = Image.open(img_file)
-            st.image(image, caption="Imagem do Produto", width=300)
+            st.image(image, caption="Foto capturada", width=300)
             
+            # Converter para base64
             buffered = BytesIO()
             image.save(buffered, format="JPEG")
             encoded_foto = base64.b64encode(buffered.getvalue()).decode("utf-8")
-            st.success("Foto capturada com sucesso!")
+            
+            # Armazenar na sessão temporariamente
+            st.session_state.temp_foto_base64 = encoded_foto
+            st.success("Foto capturada com sucesso! Vá para a aba 'Adicionar Produto' para completar o cadastro.")
+    
+    with tab3:
+        # Scanner de código de barras fora do formulário
+        st.subheader("Buscar Produto")
         
-        # Formulário para cadastro via câmera
-        with st.form("form_cam_produto"):
-            codigo_barras_cam = st.text_input("Código de Barras", 
-                                            value=st.session_state.ultimo_codigo if st.session_state.ultimo_codigo else "",
-                                            placeholder="Ex: 7891000315507",
-                                            key="codigo_cam")
-            
-            nome_cam = st.text_input("Nome do Produto", key="nome_cam")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                grupo_cam = st.selectbox("Grupo", grupo_df["DESCRICAO"].dropna(), key="grupo_cam")
-            with col2:
-                marca_cam = st.selectbox("Marca", marcas_df["DESCRICAO"].dropna(), key="marca_cam")
-                
-            col1, col2 = st.columns(2)
-            with col1:
-                preco_cam = st.number_input("Preço", min_value=0.0, step=0.01, format="%.2f", key="preco_cam")
-            with col2:
-                estoque_cam = st.number_input("Estoque", min_value=0, key="estoque_cam")
-            
-            enviar_cam = st.form_submit_button("Salvar Produto com Foto")
-            
-            if enviar_cam and codigo_barras_cam and nome_cam:
-                foto_url_final = ""
-                
-                if encoded_foto:
-                    # Em um sistema real, aqui salvaríamos a imagem em um servidor ou banco de dados
-                    # Para este exemplo, vamos apenas simular usando a foto codificada em base64
-                    foto_url_final = f"data:image/jpeg;base64,{encoded_foto}"
-                
-                novo_produto = {
-                    'nome': nome_cam,
-                    'codigo_barras': codigo_barras_cam,
-                    'grupo': grupo_cam,
-                    'marca': marca_cam,
-                    'preco': preco_cam,
-                    'estoque': estoque_cam,
-                    'foto': foto_url_final
-                }
-                
-                # Salvar no "banco de dados" local (session_state)
-                st.session_state.produtos_db[codigo_barras_cam] = novo_produto
-                st.success(f"Produto '{nome_cam}' cadastrado com sucesso com foto!")
-    
-    # Scanner de código de barras fora do formulário
-    codigo_scaneado = leitor_codigo_barras()
-    
-    # Instruções para uso com aplicativos externos
-    with st.expander("Como escanear códigos com seu celular", expanded=False):
-        mostrar_instrucoes_scanner()
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_busca = st.selectbox("Buscar por:", ["Código de Barras", "Nome", "Grupo", "Localização"])
+        with col2:
+            termo_busca = st.text_input("Digite o termo de busca:")
         
-    # Exibir todos os produtos cadastrados
-    st.subheader("Produtos Cadastrados")
-    
-    # Criar dataframe para visualização
-    produtos_list = []
-    for codigo, produto in st.session_state.produtos_db.items():
-        produtos_list.append({
-            "Código": codigo,
-            "Produto": produto['nome'],
-            "Preço": f"R$ {produto['preco']:.2f}",
-            "Estoque": produto['estoque']
-        })
-    
-    if produtos_list:
-        produtos_df = pd.DataFrame(produtos_list)
-        st.dataframe(produtos_df, use_container_width=True)
-    else:
-        st.info("Nenhum produto cadastrado.")
+        if st.button("Buscar") and termo_busca:
+            tipo_map = {
+                "Código de Barras": "codigo", 
+                "Nome": "nome", 
+                "Grupo": "grupo", 
+                "Localização": "localizacao"
+            }
+            produto = buscar_produto(termo_busca, tipo_map[tipo_busca])
+            
+            if produto:
+                st.success(f"Produto encontrado: {produto['nome']}")
+                
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    if produto['foto']:
+                        st.image(produto['foto'], width=150)
+                    elif produto['foto_base64']:
+                        img_data = base64.b64decode(produto['foto_base64'])
+                        img = Image.open(BytesIO(img_data))
+                        st.image(img, width=150)
+                
+                with col2:
+                    st.write(f"**Código:** {produto.get('codigo_barras', '')}")
+                    st.write(f"**Nome:** {produto['nome']}")
+                    st.write(f"**Grupo:** {produto.get('grupo', '')}")
+                    st.write(f"**Localização:** {produto.get('localizacao', '')}")
+                    st.write(f"**Preço Venda:** R$ {produto.get('preco_venda', 0):.2f}")
+                    st.write(f"**Estoque:** {produto.get('estoque', 0)} unidades")
+                
+                # Mostrar informações financeiras em uma área expansível
+                with st.expander("Informações Financeiras (Somente Admin)"):
+                    st.write(f"**Preço de Custo:** R$ {produto.get('preco_custo', 0):.2f}")
+                    st.write(f"**Margem:** {produto.get('margem', 0):.1f}%")
+                    st.write(f"**Imposto:** {produto.get('imposto', 0):.1f}%")
+            else:
+                st.warning(f"Nenhum produto encontrado para: {termo_busca}")
+        
+        # Exibir todos os produtos cadastrados
+        st.subheader("Produtos Cadastrados")
+        
+        # Criar dataframe para visualização
+        produtos_list = []
+        for codigo, produto in st.session_state.produtos_db.items():
+            produtos_list.append({
+                "Código": codigo,
+                "Produto": produto['nome'],
+                "Preço": f"R$ {produto.get('preco_venda', 0):.2f}",
+                "Estoque": produto.get('estoque', 0),
+                "Localização": produto.get('localizacao', '')
+            })
+        
+        if produtos_list:
+            produtos_df = pd.DataFrame(produtos_list)
+            st.dataframe(produtos_df, use_container_width=True)
+        else:
+            st.info("Nenhum produto cadastrado.")
 
 # Função de cadastro de cliente
 def render_cadastro_cliente():
@@ -449,6 +483,79 @@ def render_cadastro_cliente():
                 "cidade": cidade
             })
 
+# Função para renderizar o recibo/cupom de venda em HTML
+def render_cupom():
+    st.title("🧾 Cupom de Venda")
+    
+    if not st.session_state.ultima_venda:
+        st.warning("Não há venda finalizada para gerar cupom. Registre uma venda primeiro.")
+        return
+    
+    venda = st.session_state.ultima_venda
+    
+    # Template HTML do cupom
+    html_cupom = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Cupom Eletrônico</title>
+        <style>
+            body {{ font-family: monospace; }}
+            .cupom {{ max-width: 300px; margin: auto; padding: 10px; border: 1px dashed #000; }}
+            .center {{ text-align: center; }}
+            .linha {{ border-top: 1px dashed #000; margin: 10px 0; }}
+            .produto {{ margin-bottom: 8px; }}
+            button {{ margin-top: 20px; padding: 5px 15px; }}
+        </style>
+    </head>
+    <body>
+        <div class="cupom">
+            <div class="center">
+                <h3>ORION PDV</h3>
+                <p>🧾 CUPOM ELETRÔNICO</p>
+                <p>Data: {venda["data"]}</p>
+            </div>
+            <div class="linha"></div>
+            
+            <h4>ITENS</h4>
+    '''
+    
+    # Adicionar itens do carrinho
+    for item in venda["itens"]:
+        html_cupom += f'''
+            <div class="produto">
+                <div>{item["produto"]}</div>
+                <div>{item["quantidade"]} x R$ {item["preco_unit"]:.2f} = R$ {item["total"]:.2f}</div>
+            </div>
+        '''
+    
+    # Finalizar cupom
+    html_cupom += f'''
+            <div class="linha"></div>
+            <h4>TOTAL: R$ {venda["total"]:.2f}</h4>
+            <p><strong>Cliente:</strong> {venda["cliente"]}</p>
+            <p><strong>Pagamento:</strong> {venda["forma_pgto"]}</p>
+            <div class="linha"></div>
+            <p class="center">Obrigado pela preferência!</p>
+        </div>
+        <div class="center">
+            <button onclick="window.print()">🖨️ Imprimir</button>
+        </div>
+    </body>
+    </html>
+    '''
+    
+    # Renderizar o cupom usando components
+    components.html(html_cupom, height=600)
+    
+    # Opção para baixar o cupom como HTML
+    st.download_button(
+        label="⬇️ Baixar Cupom HTML",
+        data=html_cupom,
+        file_name="cupom_venda.html",
+        mime="text/html"
+    )
+
 # Função de registro de venda com extração assistida de código de barras
 def render_registro_venda():
     st.title("🧾 Registrar Venda")
@@ -458,15 +565,15 @@ def render_registro_venda():
         forma_pgto_df = pd.read_csv(URL_PGTO)
     except Exception as e:
         st.error(f"Erro ao carregar dados de venda: {e}")
-        cliente_df = pd.DataFrame({"NOME": ["Cliente Final", "Maria Silva", "José Santos"]})
-        forma_pgto_df = pd.DataFrame({"DESCRICAO": ["Dinheiro", "Cartão", "Pix"]})
+        return
     
     # Área de leitura de código de barras
-    st.subheader("Adicionar Produto por Código de Barras")
+    st.subheader("Adicionar Produto")
     
-    tab1, tab2 = st.tabs(["Digitar Código", "Extrair de Texto/Imagem"])
+    tab1, tab2, tab3 = st.tabs(["Por Código de Barras", "Por Nome/Descrição", "Por Localização"])
     
-    codigo_usado = None
+    codigo_produto = None
+    quantidade = 1
     
     with tab1:
         col1, col2 = st.columns([3, 1])
@@ -478,133 +585,10 @@ def render_registro_venda():
                                         value=st.session_state.ultimo_codigo if st.session_state.ultimo_codigo else "")
             
             if st.button("✅ Usar Este Código", key="btn_usar_manual"):
-                codigo_usado = codigo_manual
+                codigo_produto = codigo_manual
                 st.session_state.ultimo_codigo = codigo_manual
         
         with col2:
-            qtd = st.number_input("Quantidade", min_value=1, value=1, step=1, key="qtd_tab1")
+            quantidade = st.number_input("Quantidade", min_value=1, value=1, step=1, key="qtd_tab1")
     
     with tab2:
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            # Área para colar texto para extração de código
-            ocr_texto = st.text_area("Cole aqui o texto obtido pelo OCR ou os números do código de barras:",
-                                   placeholder="Cole o texto que contém os números do código de barras...",
-                                   height=100)
-            
-            if st.button("🔍 Extrair Código", key="btn_extrair") and ocr_texto:
-                codigo_extraido = extrair_codigo_barras(ocr_texto)
-                if codigo_extraido:
-                    st.success(f"Código extraído: {codigo_extraido}")
-                    st.session_state.ultimo_codigo = codigo_extraido
-                    codigo_usado = codigo_extraido
-                else:
-                    st.error("Não foi possível extrair um código de barras válido do texto.")
-            
-            # Upload de imagem para referência visual
-            uploaded_file = st.file_uploader("📸 Upload da foto do código de barras (para referência):", 
-                                          type=["jpg", "png", "jpeg"])
-            
-            if uploaded_file is not None:
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Imagem carregada (Use OCR externo para extrair o código)", width=250)
-                st.info("Use Google Lens ou outro app de OCR para extrair os números da imagem.")
-                
-        with col2:
-            qtd = st.number_input("Quantidade", min_value=1, value=1, step=1, key="qtd_tab2")
-    
-    # Link para instruções de scanner
-    with st.expander("Como escanear códigos com seu celular", expanded=False):
-        mostrar_instrucoes_scanner()
-    
-    # Usar o código da sessão se não tivemos um código extraído nesta iteração
-    if not codigo_usado and st.session_state.ultimo_codigo:
-        codigo_usado = st.session_state.ultimo_codigo
-    
-    # Botão para adicionar produto ao carrinho
-    if st.button("Adicionar ao Carrinho", type="primary") and codigo_usado:
-        if codigo_usado in st.session_state.produtos_db:
-            produto = st.session_state.produtos_db[codigo_usado]
-            
-            # Verificar se o produto já está no carrinho
-            encontrado = False
-            for i, item in enumerate(st.session_state.carrinho):
-                if item['codigo_barras'] == codigo_usado:
-                    st.session_state.carrinho[i]['quantidade'] += qtd
-                    st.session_state.carrinho[i]['total'] = st.session_state.carrinho[i]['quantidade'] * item['preco_unit']
-                    encontrado = True
-                    break
-                    
-            if not encontrado:
-                # Adicionar novo item ao carrinho
-                item = {
-                    'codigo_barras': codigo_usado,
-                    'produto': produto['nome'],
-                    'quantidade': qtd,
-                    'preco_unit': produto['preco'],
-                    'total': qtd * produto['preco'],
-                    'foto': produto['foto']
-                }
-                st.session_state.carrinho.append(item)
-                
-            st.success(f"Produto '{produto['nome']}' adicionado ao carrinho!")
-            
-            # Limpar código após adicionar ao carrinho
-            st.session_state.ultimo_codigo = None
-            st.rerun()
-        else:
-            st.error(f"Código de barras {codigo_usado} não encontrado. Cadastre o produto primeiro.")
-    
-    # Exibir carrinho
-    st.subheader("Carrinho de Compras")
-    
-    if not st.session_state.carrinho:
-        st.info("Carrinho vazio. Adicione produtos escaneando os códigos de barras.")
-    else:
-        # Exibir itens do carrinho
-        for i, item in enumerate(st.session_state.carrinho):
-            col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
-            
-            with col1:
-                if item['foto']:
-                    st.image(item['foto'], width=80)
-                
-            with col2:
-                st.write(f"**{item['produto']}**")
-                st.write(f"Código: {item['codigo_barras']}")
-                
-            with col3:
-                st.write(f"Qtd: {item['quantidade']}")
-                st.write(f"R$ {item['preco_unit']:.2f}")
-                
-            with col4:
-                st.write(f"**R$ {item['total']:.2f}**")
-                if st.button("🗑️", key=f"remove_{i}"):
-                    st.session_state.carrinho.pop(i)
-                    st.rerun()
-            
-            st.divider()
-        
-        # Total do carrinho
-        total_carrinho = sum(item['total'] for item in st.session_state.carrinho)
-        st.subheader(f"Total: R$ {total_carrinho:.2f}")
-        
-        # Área de finalização
-        st.subheader("Finalizar Venda")
-
-with st.form("form_venda_final"):
-    st.markdown("### Finalizar Venda")
-    forma_pagamento = st.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "Pix"])
-    confirmar = st.form_submit_button("💾 Confirmar Venda")
-
-    if confirmar:
-        st.success("✅ Venda finalizada com sucesso!")
-        st.session_state["ultima_venda"] = {
-            "produto": item["produto"],
-            "quantidade": item["quantidade"],
-            "valor_unitario": item["preco_unit"],
-            "total": item["total"],
-            "forma": forma_pagamento
-        }
-        st.session_state["carrinho"] = []
