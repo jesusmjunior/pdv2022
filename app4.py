@@ -191,46 +191,54 @@ def render_registro_venda():
 def render_painel():
     st.header("📈 Painel de Vendas")
 
+    # Tenta carregar o CSV externo
     try:
-       venda_df = pd.read_csv(URL_VENDA)
-
-if "DATA" in venda_df.columns:
-    venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
-else:
-    venda_df["DATA"] = pd.to_datetime([])  # Garante que existe a coluna mesmo vazia
-
+        venda_df = pd.read_csv(URL_VENDA)
     except:
         venda_df = pd.DataFrame(columns=["DATA", "ID_CLIENTE", "ID_FORMA_PGTO", "TOTAL"])
 
-    if 'vendas_db' in st.session_state and st.session_state.vendas_db:
-        vendas_locais = pd.DataFrame([
-            {
-                "DATA": pd.to_datetime(v["data"]),
-                "ID_CLIENTE": v["cliente"],
-                "ID_FORMA_PGTO": v["forma_pgto"],
-                "TOTAL": v["total"]
-            } for v in st.session_state.vendas_db
-        ])
-        venda_df = pd.concat([venda_df, vendas_locais], ignore_index=True)
+    # Corrigir tipo da coluna DATA
+    if "DATA" in venda_df.columns:
+        venda_df["DATA"] = pd.to_datetime(venda_df["DATA"], errors="coerce")
+    else:
+        venda_df["DATA"] = pd.to_datetime([])
 
-    st.subheader("📆 Filtro por Data")
+    # Combina com vendas locais
+    if st.session_state.vendas_db:
+        locais_df = pd.DataFrame([{
+            "DATA": pd.to_datetime(v["data"]),
+            "ID_CLIENTE": v["cliente"],
+            "ID_FORMA_PGTO": v["forma_pgto"],
+            "TOTAL": v["total"]
+        } for v in st.session_state.vendas_db])
+        venda_df = pd.concat([venda_df, locais_df], ignore_index=True)
+
+    # Filtros
     col1, col2 = st.columns(2)
     with col1:
         data_inicio = st.date_input("Data Inicial", value=datetime.today().replace(day=1))
     with col2:
         data_fim = st.date_input("Data Final", value=datetime.today())
 
-    forma_pgto_filtro = st.selectbox("Forma de Pagamento", ["Todas"] + list(venda_df["ID_FORMA_PGTO"].dropna().unique()))
+    formas = ["Todas"]
+    if "ID_FORMA_PGTO" in venda_df.columns:
+        formas += list(venda_df["ID_FORMA_PGTO"].dropna().unique())
+
+    forma_pgto = st.selectbox("Forma de Pagamento", formas)
 
     filtro = (venda_df["DATA"].dt.date >= data_inicio) & (venda_df["DATA"].dt.date <= data_fim)
-    if forma_pgto_filtro != "Todas":
-        filtro &= venda_df["ID_FORMA_PGTO"] == forma_pgto_filtro
+    if forma_pgto != "Todas":
+        filtro &= venda_df["ID_FORMA_PGTO"] == forma_pgto
 
-    df_filtrado = venda_df[filtro]
+    df = venda_df[filtro]
+    st.metric("💰 Total no Período", f"R$ {df['TOTAL'].sum():,.2f}")
 
-    st.metric("💰 Total no Período", f"R$ {df_filtrado['TOTAL'].sum():,.2f}")
-    st.bar_chart(df_filtrado.groupby("ID_FORMA_PGTO")["TOTAL"].sum())
-    st.line_chart(df_filtrado.groupby(df_filtrado["DATA"].dt.date)["TOTAL"].sum())
+    if not df.empty and "ID_FORMA_PGTO" in df.columns:
+        st.bar_chart(df.groupby("ID_FORMA_PGTO")["TOTAL"].sum())
+
+    if not df.empty:
+        st.line_chart(df.groupby(df["DATA"].dt.date)["TOTAL"].sum())
+
 
 # Página principal
 def main():
