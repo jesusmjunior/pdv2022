@@ -1162,4 +1162,3 @@ def painel_financeiro():
 
     with st.expander("📅 Vendas Registradas"):
         st.dataframe(vendas_df.sort_values("DATA", ascending=False).reset_index(drop=True))
-
