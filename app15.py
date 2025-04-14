@@ -117,7 +117,134 @@ def extrair_texto_google_vision(imagem_pil):
         return ""
 
 def registrar_venda():
-    st.warning("Função 'registrar_venda()' ainda não implementada neste script.")
+    st.header("🧾 Nova Venda")
+
+    abas = st.tabs(["🔍 Buscar Produto", "📷 Scanner"])
+
+    with abas[0]:
+        termo = st.text_input("Digite o nome ou código do produto")
+        resultados = []
+        if termo:
+            for cod, prod in st.session_state.produtos_db.items():
+                if termo.lower() in prod["nome"].lower() or termo in prod["codigo_barras"]:
+                    resultados.append(prod)
+
+        if resultados:
+            for prod in resultados:
+                with st.container():
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        st.image(prod["foto"], width=100)
+                    with col2:
+                        st.write(f"**{prod['nome']}** - R$ {prod['preco']:.2f}")
+                        qtd = st.number_input(
+                            f"Qtd ({prod['codigo_barras']})", 
+                            min_value=1, 
+                            max_value=prod["estoque"], 
+                            step=1, 
+                            key=f"qtd_{prod['codigo_barras']}"
+                        )
+                        if st.button(f"Adicionar {prod['nome']}", key=f"add_{prod['codigo_barras']}"):
+                            adicionar_ao_carrinho(prod['codigo_barras'], qtd)
+
+    with abas[1]:
+        st.info("🔧 Scanner não implementado ainda nesta versão.")
+
+    st.subheader("🛒 Carrinho")
+    if not st.session_state.carrinho:
+        st.info("Carrinho vazio")
+    else:
+        total = 0
+        for i, item in enumerate(st.session_state.carrinho):
+            st.write(f"{item['quantidade']}x {item['produto']} - R$ {item['total']:.2f}")
+            total += item["total"]
+            if st.button("❌ Remover", key=f"del_{i}"):
+                remover_do_carrinho(i)
+
+        st.metric("Total", f"R$ {total:.2f}")
+        cliente = st.text_input("Cliente", value="Consumidor Final")
+        pgto = st.selectbox("Forma de Pagamento", ["Dinheiro", "Pix", "Cartão", "Crediário"])
+        if st.button("💳 Finalizar Venda"):
+            venda_id = str(uuid.uuid4())[:6]
+            registrar_venda_db(cliente, pgto, total)
+            st.success(f"Venda {venda_id} concluída com sucesso!")
+
+def adicionar_ao_carrinho(codigo_barras, qtd):
+    produto = st.session_state.produtos_db[codigo_barras]
+    if produto["estoque"] >= qtd:
+        total = round(produto["preco"] * qtd, 2)
+        st.session_state.carrinho.append({
+            "codigo_barras": codigo_barras,
+            "produto": produto["nome"],
+            "quantidade": qtd,
+            "preco_unit": produto["preco"],
+            "total": total
+        })
+        st.session_state.produtos_db[codigo_barras]["estoque"] -= qtd
+        st.success(f"{qtd}x {produto['nome']} adicionado(s) ao carrinho.")
+    else:
+        st.error("Estoque insuficiente.")
+
+def remover_do_carrinho(index):
+    item = st.session_state.carrinho[index]
+    st.session_state.produtos_db[item["codigo_barras"]]["estoque"] += item["quantidade"]
+    st.session_state.carrinho.pop(index)
+    st.rerun()
+
+def registrar_venda_db(cliente, forma_pgto, total):
+    venda_id = str(uuid.uuid4())[:8].upper()
+    nova_venda = {
+        "id": venda_id,
+        "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "cliente": cliente,
+        "forma_pgto": forma_pgto,
+        "itens": st.session_state.carrinho.copy(),
+        "total": total
+    }
+    st.session_state.vendas_db.append(nova_venda)
+    recibo = gerar_recibo_html(nova_venda)
+    st.download_button("📄 Baixar Recibo", recibo, file_name=f"recibo_{venda_id}.html", mime="text/html")
+    st.session_state.carrinho = []
+
+def gerar_recibo_html(venda):
+    html = f"""
+    <!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Recibo</title>
+    <style>
+        body {{ font-family: Arial; max-width:600px; margin:auto; padding:20px; }}
+        .header {{ text-align:center; margin-bottom:20px; }}
+        .linha {{ border-top:1px dashed #000; margin:10px 0; }}
+        .total {{ font-weight:bold; font-size:1.2em; }}
+        table {{ width:100%; border-collapse:collapse; margin:15px 0; }}
+        th, td {{ padding:8px; text-align:left; border-bottom:1px solid #ddd; }}
+        th {{ background-color:#f2f2f2; }}
+        .footer {{ text-align:center; margin-top:30px; font-size:0.9em; color:#555; }}
+    </style></head><body>
+    <div class=\"header\">
+        <h2>ORION PDV</h2><h3>RECIBO ELETRÔNICO</h3>
+    </div>
+    <div class=\"linha\"></div>
+    <p><strong>Data:</strong> {venda['data']}</p>
+    <p><strong>Cliente:</strong> {venda['cliente']}</p>
+    <p><strong>Pagamento:</strong> {venda['forma_pgto']}</p>
+    <div class=\"linha\"></div>
+    <table><thead><tr><th>Produto</th><th>Qtd</th><th>Unit</th><th>Total</th></tr></thead><tbody>
+    """
+    for item in venda["itens"]:
+        html += f"""
+        <tr><td>{item['produto']}</td><td>{item['quantidade']}</td>
+        <td>R$ {item['preco_unit']:.2f}</td><td>R$ {item['total']:.2f}</td></tr>"""
+    html += f"""
+    </tbody></table>
+    <div class=\"linha\"></div>
+    <p class=\"total\">Total: R$ {venda['total']:.2f}</p>
+    <div class=\"linha\"></div>
+    <div class=\"footer\">
+        <p>Obrigado pela preferência!</p>
+        <p><small>Gerado em: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</small></p>
+    </div>
+    </body></html>
+    """
+    return html
 
 def cadastro_produto():
     st.warning("Função 'cadastro_produto()' ainda não implementada neste script.")
@@ -126,21 +253,21 @@ def cadastro_cliente():
     st.warning("Função 'cadastro_cliente()' ainda não implementada neste script.")
 
 def painel_financeiro():
-    st.header("\U0001F4CA Painel Financeiro")
+    st.header("📊 Painel Financeiro")
 
     vendas_combinadas = []
     try:
         df_ext = pd.read_csv(URLS["venda"])
         df_ext["DATA"] = pd.to_datetime(df_ext["DATA"], errors="coerce")
         vendas_combinadas.extend(df_ext.to_dict(orient="records"))
-        st.success(f"\u2705 {len(df_ext)} vendas externas carregadas")
+        st.success(f"✅ {len(df_ext)} vendas externas carregadas")
     except Exception as e:
-        st.warning(f"\u26a0\ufe0f Dados externos n\u00e3o acess\u00edveis: {str(e)}")
+        st.warning(f"⚠️ Dados externos não acessíveis: {str(e)}")
 
     vendas_combinadas.extend(st.session_state.vendas_db)
 
     if not vendas_combinadas:
-        st.info("\U0001F4AC Nenhuma venda registrada ainda.")
+        st.info("💬 Nenhuma venda registrada ainda.")
         return
 
     vendas_df = pd.DataFrame([
@@ -160,11 +287,11 @@ def painel_financeiro():
     ticket_medio = vendas_df["TOTAL"].mean()
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("\U0001F9FE Total de Vendas", f"{total_vendas}")
-    col2.metric("\U0001F4B0 Faturamento", f"R$ {soma_total:.2f}")
-    col3.metric("\U0001F4C8 Ticket M\u00e9dio", f"R$ {ticket_medio:.2f}")
+    col1.metric("🧾 Total de Vendas", f"{total_vendas}")
+    col2.metric("💰 Faturamento", f"R$ {soma_total:.2f}")
+    col3.metric("📈 Ticket Médio", f"R$ {ticket_medio:.2f}")
 
-    with st.expander("\U0001F4C5 Vendas Registradas"):
+    with st.expander("📅 Vendas Registradas"):
         st.dataframe(vendas_df.sort_values("DATA", ascending=False).reset_index(drop=True))
 
 # Menu Principal
