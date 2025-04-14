@@ -112,3 +112,77 @@ def importar_produtos_csv():
 # ----------------------------- EXECUCAO ----------------------------- #
 if __name__ == "__main__":
     importar_produtos_csv()
+# Lousa 3 – Sessão, Autenticação e Utilitários de OCR e Códigos de Barras
+import streamlit as st
+import hashlib
+import re
+from datetime import datetime
+
+# ----------------------------- USUÁRIOS ----------------------------- #
+USUARIOS = {
+    "admjesus": {
+        "nome": "ADM Jesus",
+        "senha_hash": hashlib.sha256("senha123".encode()).hexdigest()
+    }
+}
+
+# ----------------------------- FUNÇÃO DE AUTENTICAÇÃO ----------------------------- #
+def autenticar_usuario():
+    st.title("🔐 Login - ORION ADM. JESUS MARTINS O. JR. PDV")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("https://github.com/jesusmjunior/pdv2022/blob/69ff7f9ecaa6209d10cec3ea589f803b56180c32/logo.webp", width=200)
+
+    usuario = st.text_input("Usuário")
+    senha = st.text_input("Senha", type="password")
+
+    if st.button("Entrar", type="primary"):
+        if usuario in USUARIOS:
+            hash_inserida = hashlib.sha256(senha.encode()).hexdigest()
+            if hash_inserida == USUARIOS[usuario]["senha_hash"]:
+                st.session_state["autenticado"] = True
+                st.session_state["usuario"] = usuario
+                st.success("Login realizado com sucesso!")
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
+        else:
+            st.error("Usuário não encontrado.")
+
+# ----------------------------- EXTRAÇÃO DE CÓDIGO DE BARRAS ----------------------------- #
+def extrair_codigo_barras(texto):
+    numeros = re.findall(r'\d+', texto)
+    codigo_extraido = ''.join(numeros)
+    if len(codigo_extraido) >= 8:
+        return codigo_extraido
+    return None
+
+# ----------------------------- RECONHECIMENTO DE TEXTO (OCR) ----------------------------- #
+def reconhecer_texto_imagem():
+    st.markdown("""
+    <div style="padding: 10px; border: 1px solid #f63366; border-radius: 5px; margin-bottom: 10px; background-color: #fff5f5;">
+        <h4 style="color: #f63366;">Como usar o reconhecimento de texto:</h4>
+        <ol>
+            <li>Tire uma foto clara do código de barras com seu celular</li>
+            <li>Use um aplicativo de OCR como Google Lens para extrair os números</li>
+            <li>Cole os números obtidos no campo abaixo</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
+
+    ocr_texto = st.text_area("Cole aqui o texto obtido pelo OCR ou os números do código de barras",
+                             placeholder="Cole aqui o texto que contém os números do código de barras...",
+                             height=100)
+
+    codigo_barras = None
+
+    if st.button("Extrair Código de Barras", type="primary") and ocr_texto:
+        codigo_barras = extrair_codigo_barras(ocr_texto)
+
+        if codigo_barras:
+            st.success(f"Código de barras extraído: {codigo_barras}")
+            st.session_state.ultimo_codigo = codigo_barras
+        else:
+            st.error("Não foi possível extrair um código de barras válido do texto fornecido.")
+
+    return st.session_state.ultimo_codigo
