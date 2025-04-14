@@ -1,140 +1,579 @@
-                        margem_nf = st.slider("Margem (%)", 0, 100, 30, key=f"margem_{produto['codigo']}")
-                    
-                    with col3:
-                        preco_venda = produto['valor_unit'] * (1 + margem_nf/100)
-                        st.write(f"**Preço Sugerido:** R$ {preco_venda:.2f}")
-                        adicionar = st.checkbox("Importar", key=f"add_{produto['codigo']}")
-            
-            if st.button("Importar Selecionados", type="primary"):
-                produtos_importados = 0
-                for produto in produtos_nf:
-                    if st.session_state.get(f"add_{produto['codigo']}", False):
-                        codigo = produto['codigo']
-                        margem = st.session_state.get(f"margem_{codigo}", 30)
-                        
-                        if codigo in st.session_state.produtos_db:
-                            st.session_state.produtos_db[codigo]['estoque'] += produto['qtd']
-                            st.session_state.produtos_db[codigo]['preco_custo'] = produto['valor_unit']
-                            st.session_state.produtos_db[codigo]['preco'] = produto['valor_unit'] * (1 + margem/100)
-                            st.session_state.produtos_db[codigo]['margem'] = margem
-                        else:
-                            st.session_state.produtos_db[codigo] = {
-                                "nome": produto['descricao'],
-                                "codigo_barras": codigo,
-                                "grupo": "Importado NF",
-                                "marca": "Importado NF",
-                                "preco": produto['valor_unit'] * (1 + margem/100),
-                                "preco_custo": produto['valor_unit'],
-                                "margem": margem,
-                                "estoque": produto['qtd'],
-                                "unidade_medida": produto['unidade'],
-                                "descricao": f"Importado de Nota Fiscal em {datetime.now().strftime('%d/%m/%Y')}",
-                                "localizacao": "",
-                                "fornecedor": "Importado via NF",
-                                "foto": "https://via.placeholder.com/150"
-                            }
-                        produtos_importados += 1
-                
-                if produtos_importados > 0:
-                    st.success(f"{produtos_importados} produtos importados/atualizados com sucesso!")
-                    st.rerun()
-                else:
-                    st.warning("Nenhum produto selecionado para importação")
-    
-    # Exibição dos produtos cadastrados
-    st.subheader("Produtos Cadastrados")
-    
-    col1, col2 = st.columns([3, 1])
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import uuid
+import hashlib
+import re
+from PIL import Image
+import xml.etree.ElementTree as ET
+from io import BytesIO
+import base64
+
+# Configuração da página
+st.set_page_config(page_title="ORION PDV-ADM. JESUS MARTINS & ORION I.A.", layout="wide")
+
+# URLs dos dados externos
+URL_GRUPO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=528868130&single=true&output=csv"
+URL_MARCAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=832596780&single=true&output=csv"
+URL_CLIENTE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1645177762&single=true&output=csv"
+URL_PRODUTO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1506891785&single=true&output=csv"
+URL_PGTO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1061064660&single=true&output=csv"
+URL_VENDA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1817416820&single=true&output=csv"
+
+# Dados de autenticação
+USUARIOS = {
+    "admjesus": {
+        "nome": "ADM Jesus",
+        "senha_hash": hashlib.sha256("senha123".encode()).hexdigest()
+    }
+}
+
+# Inicialização do estado da sessão
+if 'produtos_db' not in st.session_state:
+    st.session_state.produtos_db = {
+        '7891000315507': {
+            'nome': 'Leite Integral',
+            'codigo_barras': '7891000315507',
+            'grupo': 'Laticínios',
+            'marca': 'Ninho',
+            'preco': 5.99,
+            'preco_custo': 4.50,
+            'margem': 33.11,
+            'estoque': 50,
+            'unidade_medida': 'L',
+            'descricao': 'Leite integral longa vida 1L',
+            'localizacao': 'Prateleira A1',
+            'fornecedor': 'Distribuidor Leite Bom',
+            'foto': "https://www.nestleprofessional.com.br/sites/default/files/styles/np_product_detail/public/2022-09/leite-em-po-ninho-integral-lata-400g.png"
+        },
+        '7891910000197': {
+            'nome': 'Arroz',
+            'codigo_barras': '7891910000197',
+            'grupo': 'Grãos',
+            'marca': 'Tio João',
+            'preco': 22.90,
+            'preco_custo': 18.50,
+            'margem': 23.78,
+            'estoque': 35,
+            'unidade_medida': 'pacote',
+            'descricao': 'Arroz tipo 1 5kg',
+            'localizacao': 'Prateleira B2',
+            'fornecedor': 'Casa dos Grãos',
+            'foto': "https://m.media-amazon.com/images/I/61l6ojQQtDL._AC_UF894,1000_QL80_.jpg"
+        },
+        '7891149410116': {
+            'nome': 'Café',
+            'codigo_barras': '7891149410116',
+            'grupo': 'Bebidas',
+            'marca': 'Pilão',
+            'preco': 15.75,
+            'preco_custo': 12.00,
+            'margem': 31.25,
+            'estoque': 28,
+            'unidade_medida': 'g',
+            'descricao': 'Café torrado e moído 500g',
+            'localizacao': 'Prateleira C3',
+            'fornecedor': 'Distribuidora de Café',
+            'foto': "https://m.media-amazon.com/images/I/51xq5MnKz4L._AC_UF894,1000_QL80_.jpg"
+        }
+    }
+
+if 'vendas_db' not in st.session_state:
+    st.session_state.vendas_db = [{
+        "id": "ABC123",
+        "data": "2025-04-13 10:00:00",
+        "cliente": "Consumidor Final",
+        "forma_pgto": "Dinheiro",
+        "itens": [{
+            "produto": "Leite Integral",
+            "quantidade": 1,
+            "preco_unit": 5.99,
+            "total": 5.99
+        }],
+        "total": 5.99
+    }]
+
+if 'carrinho' not in st.session_state:
+    st.session_state.carrinho = []
+
+if 'clientes_db' not in st.session_state:
+    st.session_state.clientes_db = []
+
+if 'ultimo_codigo' not in st.session_state:
+    st.session_state.ultimo_codigo = None
+
+# Funções auxiliares
+def extrair_codigo_barras(texto):
+    numeros = re.findall(r'\d+', texto)
+    codigo_extraido = ''.join(numeros)
+    if len(codigo_extraido) >= 8:
+        return codigo_extraido
+    return None
+
+def autenticar_usuario():
+    st.title("🔐 Login - ORION ADM. JESUS MARTINS O. JR. PDV")
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("📥 Exportar Lista"):
-            produtos_df = pd.DataFrame(st.session_state.produtos_db.values())
-            csv = produtos_df.to_csv(index=False)
-            st.download_button(
-                label="Baixar CSV",
-                data=csv,
-                file_name=f"produtos_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                key="download_produtos"
-            )
+        st.image("https://github.com/jesusmjunior/pdv2022/blob/69ff7f9ecaa6209d10cec3ea589f803b56180c32/logo.webp", width=200)
     
-    produtos_df = pd.DataFrame(st.session_state.produtos_db.values())
-    if not produtos_df.empty:
-        col1, col2 = st.columns(2)
+    usuario = st.text_input("Usuário")
+    senha = st.text_input("Senha", type="password")
+    
+    if st.button("Entrar", type="primary"):
+        if usuario in USUARIOS:
+            hash_inserida = hashlib.sha256(senha.encode()).hexdigest()
+            if hash_inserida == USUARIOS[usuario]["senha_hash"]:
+                st.session_state["autenticado"] = True
+                st.session_state["usuario"] = usuario
+                st.success("Login realizado com sucesso!")
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
+        else:
+            st.error("Usuário não encontrado.")
+
+def reconhecer_texto_imagem():
+    st.markdown("""
+    <div style="padding: 10px; border: 1px solid #f63366; border-radius: 5px; margin-bottom: 10px; background-color: #fff5f5;">
+        <h4 style="color: #f63366;">Como usar o reconhecimento de texto:</h4>
+        <ol>
+            <li>Tire uma foto clara do código de barras com seu celular</li>
+            <li>Use um aplicativo de OCR como Google Lens para extrair os números</li>
+            <li>Cole os números obtidos no campo abaixo</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    ocr_texto = st.text_area("Cole aqui o texto obtido pelo OCR ou os números do código de barras",
+                         placeholder="Cole aqui o texto que contém os números do código de barras...",
+                         height=100)
+    
+    codigo_barras = None
+    
+    if st.button("Extrair Código de Barras", type="primary") and ocr_texto:
+        codigo_barras = extrair_codigo_barras(ocr_texto)
+        
+        if codigo_barras:
+            st.success(f"Código de barras extraído: {codigo_barras}")
+            st.session_state.ultimo_codigo = codigo_barras
+        else:
+            st.error("Não foi possível extrair um código de barras válido do texto fornecido.")
+    
+    return st.session_state.ultimo_codigo
+
+def mostrar_instrucoes_scanner():
+    st.markdown("""
+    ### 📱 Como utilizar aplicativos de scanner
+    
+    Para escanear códigos de barras com seu celular:
+    
+    1. **Google Lens** - Aponte para o código, tire uma foto e veja os números detectados
+       - Abra o Google Lens (disponível no Google Assistant ou Google Fotos)
+       - Aponte para o código de barras
+       - Quando os números aparecerem, copie-os
+    
+    2. **Aplicativo de Câmera** - Muitos celulares já detectam códigos automaticamente
+       - Abra a câmera e aponte para o código
+       - Alguns celulares mostram um link ou os números do código
+       
+    3. **Aplicativos específicos** - Há vários aplicativos gratuitos para escanear códigos:
+       - "Barcode Scanner" (Android/iOS)
+       - "QR & Barcode Scanner" (Android/iOS)
+    
+    Depois de obter os números do código de barras, digite-os na aba "Digitar Código" 
+    ou cole o texto completo na aba "Extrair de Texto" e o sistema identificará automaticamente o código.
+    """)
+    
+    app_url = "https://pdvoliveira.streamlit.app" 
+    st.markdown(f"""
+    <div style="text-align: center; margin: 20px 0;">
+        <p>Escaneie este QR Code para abrir o aplicativo no seu celular:</p>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={app_url}" width="150">
+    </div>
+    """, unsafe_allow_html=True)
+
+def gerar_recibo_html(venda):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    html = f"""
+    <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Recibo</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; }}
+        .header {{ text-align: center; margin-bottom: 20px; }}
+        .linha {{ border-top: 1px dashed #000; margin: 10px 0; }}
+        .total {{ font-weight: bold; font-size: 1.2em; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+        th, td {{ padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }}
+        th {{ background-color: #f2f2f2; }}
+        .footer {{ text-align: center; margin-top: 30px; font-size: 0.9em; color: #555; }}
+    </style></head><body>
+    <div class="header">
+        <h2>ORION PDV</h2>
+        <h3>CUPOM ELETRÔNICO</h3>
+    </div>
+    <div class="linha"></div>
+    <p><strong>Data:</strong> {venda['data']}</p>
+    <p><strong>Cliente:</strong> {venda['cliente']}</p>
+    <p><strong>Pagamento:</strong> {venda['forma_pgto']}</p>
+    <div class="linha"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Produto</th>
+                <th>Qtd</th>
+                <th>Unit</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+    """
+    
+    for item in venda['itens']:
+        html += f"""
+            <tr>
+                <td>{item['produto']}</td>
+                <td>{item['quantidade']}</td>
+                <td>R$ {item['preco_unit']:.2f}</td>
+                <td>R$ {item['total']:.2f}</td>
+            </tr>
+        """
+    
+    html += f"""
+        </tbody>
+    </table>
+    <div class="linha"></div>
+    <p class="total">Total da Venda: R$ {venda['total']:.2f}</p>
+    <div class="linha"></div>
+    <div class="footer">
+        <p>Obrigado pela preferência!</p>
+        <p>Volte sempre</p>
+        <p><small>Gerado em: {timestamp}</small></p>
+    </div>
+    <script>
+        window.onload = function() {{
+            window.print();
+        }}
+    </script>
+    </body></html>
+    """
+    return html
+
+def leitor_codigo_barras():
+    st.subheader("📷 Scanner de Código de Barras")
+    
+    st.markdown("""
+    <div style="padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
+        <h4 style="color: #0066cc;">Scanner de Código de Barras Assistido</h4>
+        <p>Para escanear um código de barras, você tem duas opções:</p>
+        <ol>
+            <li><strong>Via celular:</strong> Use Google Lens ou aplicativo de scanner, depois digite o código detectado</li>
+            <li><strong>Via caixa de texto:</strong> Utilize a seção abaixo para colar texto com números e extrair o código automaticamente</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["Digitar Código", "Extrair de Texto"])
+    
+    with tab1:
+        col1, col2 = st.columns([3, 1])
+        
         with col1:
-            if 'grupo' in produtos_df.columns:
-                filtro_grupo = st.multiselect("Filtrar por Grupo:", 
-                                            options=["Todos"] + list(produtos_df['grupo'].unique()),
-                                            default="Todos")
+            codigo_barras = st.text_input("Digite o código de barras:", 
+                                        value=st.session_state.ultimo_codigo if st.session_state.ultimo_codigo else "",
+                                        placeholder="Ex: 7891000315507")
+        
         with col2:
-            if 'marca' in produtos_df.columns:
-                filtro_marca = st.multiselect("Filtrar por Marca:", 
-                                            options=["Todas"] + list(produtos_df['marca'].unique()),
-                                            default="Todas")
-        
-        df_filtrado = produtos_df.copy()
-        if filtro_grupo and "Todos" not in filtro_grupo and 'grupo' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['grupo'].isin(filtro_grupo)]
-        if filtro_marca and "Todas" not in filtro_marca and 'marca' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['marca'].isin(filtro_marca)]
-            
-        colunas_display = ["nome", "codigo_barras", "preco", "estoque", "unidade_medida", "marca", "grupo"]
-        st.dataframe(df_filtrado[colunas_display])
-    else:
-        st.warning("Nenhum produto cadastrado")
-        
-    st.subheader("Editar Produto Existente")
-    codigo_editar = st.text_input("Digite o código do produto para editar:")
+            st.image("https://www.qr-code-generator.com/wp-content/themes/qr/images/barcode-generator-free.jpg", 
+                   width=150, caption="Exemplo")
     
-    if codigo_editar in st.session_state.produtos_db:
-        produto = st.session_state.produtos_db[codigo_editar]
-        st.success(f"Editando: {produto['nome']}")
+        if st.button("Usar Código", type="primary") and codigo_barras:
+            st.session_state.ultimo_codigo = codigo_barras
+            st.success(f"Código registrado: {codigo_barras}")
+    
+    with tab2:
+        codigo_texto = reconhecer_texto_imagem()
+    
+    codigo_selecionado = st.session_state.ultimo_codigo
+    if codigo_selecionado and codigo_selecionado in st.session_state.produtos_db:
+        produto = st.session_state.produtos_db[codigo_selecionado]
+        st.success(f"Produto encontrado: {produto['nome']}")
         
-        with st.form("form_editar_produto"):
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if produto['foto']:
+                st.image(produto['foto'], width=150)
+        with col2:
+            st.subheader(produto['nome'])
+            st.write(f"**Preço:** R$ {produto['preco']:.2f}")
+            st.write(f"**Estoque:** {produto['estoque']} unidades")
+    elif codigo_selecionado:
+        st.warning(f"Código {codigo_selecionado} não encontrado no cadastro.")
+    
+    return codigo_selecionado
+
+def processar_xml_nfe(arquivo_xml):
+    try:
+        tree = ET.parse(arquivo_xml)
+        root = tree.getroot()
+        
+        # Namespaces da NFe
+        ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
+        
+        produtos = []
+        
+        # Encontrar todos os itens da nota
+        for det in root.findall('.//nfe:det', ns):
+            prod = det.find('nfe:prod', ns)
+            
+            codigo = prod.find('nfe:cProd', ns).text if prod.find('nfe:cProd', ns) is not None else str(uuid.uuid4())[:8]
+            descricao = prod.find('nfe:xProd', ns).text if prod.find('nfe:xProd', ns) is not None else "Produto sem descrição"
+            quantidade = float(prod.find('nfe:qCom', ns).text) if prod.find('nfe:qCom', ns) is not None else 1
+            unidade = prod.find('nfe:uCom', ns).text if prod.find('nfe:uCom', ns) is not None else "unidade"
+            valor_unit = float(prod.find('nfe:vUnCom', ns).text) if prod.find('nfe:vUnCom', ns) is not None else 0.0
+            
+            produtos.append({
+                "codigo": codigo,
+                "descricao": descricao,
+                "qtd": quantidade,
+                "unidade": unidade,
+                "valor_unit": valor_unit
+            })
+        
+        return produtos
+    except Exception as e:
+        st.error(f"Erro ao processar XML: {str(e)}")
+        return []
+
+# Módulo de Registro de Venda
+def registrar_venda():
+    st.header("🧾 Registrar Venda")
+    
+    # Opções de busca
+    busca_tabs = st.tabs(["Buscar por Nome/Código", "Scanner de Código de Barras"])
+    
+    with busca_tabs[0]:
+        st.subheader("Buscar Produto")
+        termo_busca = st.text_input("Digite o nome ou código do produto:")
+        
+        if termo_busca:
+            resultados = []
+            for codigo, produto in st.session_state.produtos_db.items():
+                if (termo_busca.lower() in produto['nome'].lower() or 
+                    termo_busca in produto['codigo_barras']):
+                    resultados.append(produto)
+            
+            if resultados:
+                cols = st.columns(3)
+                for i, produto in enumerate(resultados):
+                    with cols[i % 3]:
+                        st.image(produto['foto'], width=150, caption=produto['nome'])
+                        st.write(f"**Preço:** R$ {produto['preco']:.2f}")
+                        st.write(f"**Estoque:** {produto['estoque']}")
+                        
+                        with st.form(key=f"add_{produto['codigo_barras']}"):
+                            qtd = st.number_input(
+                                "Quantidade",
+                                min_value=1,
+                                max_value=produto['estoque'],
+                                value=1,
+                                key=f"qtd_{produto['codigo_barras']}"
+                            )
+                            
+                            if st.form_submit_button("Adicionar"):
+                                item_existente = next((item for item in st.session_state.carrinho 
+                                                     if item['codigo_barras'] == produto['codigo_barras']), None)
+                                
+                                if item_existente:
+                                    item_existente['quantidade'] += qtd
+                                    item_existente['total'] = item_existente['quantidade'] * item_existente['preco_unit']
+                                else:
+                                    st.session_state.carrinho.append({
+                                        "codigo_barras": produto['codigo_barras'],
+                                        "produto": produto['nome'],
+                                        "quantidade": qtd,
+                                        "preco_unit": produto['preco'],
+                                        "total": qtd * produto['preco'],
+                                        "foto": produto['foto']
+                                    })
+                                
+                                st.session_state.produtos_db[produto['codigo_barras']]['estoque'] -= qtd
+                                st.success(f"Adicionado {qtd}x {produto['nome']}")
+                                st.rerun()
+            else:
+                st.warning("Nenhum produto encontrado.")
+    
+    with busca_tabs[1]:
+        codigo_barras = leitor_codigo_barras()
+        
+        if codigo_barras and codigo_barras in st.session_state.produtos_db:
+            produto = st.session_state.produtos_db[codigo_barras]
+            qtd = st.number_input("Quantidade", min_value=1, max_value=produto['estoque'], value=1, key="qtd_scanner")
+            
+            if st.button("Adicionar ao Carrinho", type="primary"):
+                item_existente = next((item for item in st.session_state.carrinho 
+                                     if item['codigo_barras'] == codigo_barras), None)
+                
+                if item_existente:
+                    item_existente['quantidade'] += qtd
+                    item_existente['total'] = item_existente['quantidade'] * item_existente['preco_unit']
+                else:
+                    st.session_state.carrinho.append({
+                        "codigo_barras": codigo_barras,
+                        "produto": produto['nome'],
+                        "quantidade": qtd,
+                        "preco_unit": produto['preco'],
+                        "total": qtd * produto['preco'],
+                        "foto": produto['foto']
+                    })
+                
+                st.session_state.produtos_db[codigo_barras]['estoque'] -= qtd
+                st.success(f"Adicionado {qtd}x {produto['nome']}")
+                st.session_state.ultimo_codigo = None
+                st.rerun()
+        
+        with st.expander("Como escanear códigos com seu celular", expanded=False):
+            mostrar_instrucoes_scanner()
+    
+    # Carrinho
+    st.subheader("🛒 Carrinho")
+    
+    if not st.session_state.carrinho:
+        st.info("Carrinho vazio")
+    else:
+        total_venda = 0
+        for i, item in enumerate(st.session_state.carrinho):
+            cols = st.columns([1, 3, 1, 1, 1])
+            with cols[0]:
+                st.image(item['foto'], width=50)
+            with cols[1]:
+                st.write(f"**{item['produto']}**")
+            with cols[2]:
+                st.write(f"R$ {item['preco_unit']:.2f}")
+            with cols[3]:
+                st.write(f"{item['quantidade']}x")
+            with cols[4]:
+                st.write(f"R$ {item['total']:.2f}")
+                if st.button("❌", key=f"rm_{i}"):
+                    st.session_state.produtos_db[item['codigo_barras']]['estoque'] += item['quantidade']
+                    st.session_state.carrinho.pop(i)
+                    st.rerun()
+            
+            total_venda += item['total']
+        
+        st.divider()
+        st.markdown(f"**Total:** R$ {total_venda:.2f}")
+        
+        # Finalização
+        with st.form("finalizar_venda"):
+            try:
+                clientes_df = pd.read_csv(URL_CLIENTE)
+                clientes_lista = ["Consumidor Final"] + list(clientes_df["NOME"].dropna())
+            except:
+                clientes_lista = ["Consumidor Final"] + [c["NOME"] for c in st.session_state.clientes_db]
+
+            try:
+                pgto_df = pd.read_csv(URL_PGTO)
+                pgto_lista = list(pgto_df["DESCRICAO"].dropna())
+            except:
+                pgto_lista = ["Dinheiro", "Cartão", "Pix"]
+                
+            cliente = st.selectbox("Cliente", clientes_lista)
+            forma_pgto = st.selectbox("Forma de Pagamento", pgto_lista)
+            
+            if st.form_submit_button("Finalizar Venda"):
+                nova_venda = {
+                    "id": str(uuid.uuid4())[:6],
+                    "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "cliente": cliente,
+                    "forma_pgto": forma_pgto,
+                    "itens": st.session_state.carrinho.copy(),
+                    "total": total_venda
+                }
+                
+                st.session_state.vendas_db.append(nova_venda)
+                st.session_state.carrinho = []
+                
+                recibo_html = gerar_recibo_html(nova_venda)
+                st.components.v1.html(recibo_html, height=600)
+                st.download_button(
+                    "📄 Baixar Recibo",
+                    recibo_html,
+                    f"recibo_{nova_venda['id']}.html",
+                    "text/html"
+                )
+                st.success("Venda registrada!")
+
+# Módulo de Cadastro de Produto
+def cadastro_produto():
+    st.header("📦 Cadastro de Produto")
+    
+    # Tabs para diferentes métodos de cadastro
+    cadastro_tabs = st.tabs(["Cadastro Manual", "Importar Planilha", "Importar Nota Fiscal"])
+    
+    with cadastro_tabs[0]:
+        try:
+            grupo_df = pd.read_csv(URL_GRUPO)
+            marcas_df = pd.read_csv(URL_MARCAS)
+            grupos_lista = list(grupo_df["DESCRICAO"].dropna())
+            marcas_lista = list(marcas_df["DESCRICAO"].dropna())
+        except:
+            grupos_lista = ["Alimentos", "Bebidas", "Limpeza", "Higiene", "Diversos"]
+            marcas_lista = ["Nestlé", "Unilever", "P&G", "Ambev", "Outras"]
+        
+        usar_scanner = st.checkbox("Usar scanner de código de barras para o código")
+        
+        if usar_scanner:
+            st.info("Escaneie o código de barras do produto")
+            codigo_barras = leitor_codigo_barras()
+            if codigo_barras:
+                st.success(f"Código de barras obtido: {codigo_barras}")
+        
+        with st.form("form_produto"):
             col1, col2 = st.columns(2)
             
             with col1:
-                nome = st.text_input("Nome do Produto", value=produto.get('nome', ''))
-                grupo = st.selectbox("Grupo/Categoria", grupos_lista, 
-                                    index=grupos_lista.index(produto.get('grupo')) if produto.get('grupo') in grupos_lista else 0)
+                nome = st.text_input("Nome do Produto*")
+                codigo = st.text_input("Código de Barras*", 
+                                    value=st.session_state.ultimo_codigo if usar_scanner and st.session_state.ultimo_codigo else "")
+                grupo = st.selectbox("Grupo/Categoria*", grupos_lista)
                 
                 unidades_medida = ["unidade", "kg", "g", "L", "ml", "pacote", "caixa", "fardo"]
-                unidade_medida = st.selectbox("Unidade de Medida", unidades_medida,
-                                            index=unidades_medida.index(produto.get('unidade_medida')) if produto.get('unidade_medida') in unidades_medida else 0)
+                unidade_medida = st.selectbox("Unidade de Medida*", unidades_medida)
             
             with col2:
-                modo_preco = st.radio("Modo de precificação:", ["Preço direto", "Baseado em custo"], key="edit_modo")
+                modo_preco = st.radio("Modo de precificação:", ["Preço direto", "Baseado em custo"])
                 
                 if modo_preco == "Preço direto":
-                    preco = st.number_input("Preço de Venda", min_value=0.01, format="%.2f", value=float(produto.get('preco', 0.01)))
-                    preco_custo = st.number_input("Preço de Custo", min_value=0.0, format="%.2f", value=float(produto.get('preco_custo', 0.0)))
+                    preco = st.number_input("Preço de Venda*", min_value=0.01, format="%.2f")
+                    preco_custo = st.number_input("Preço de Custo (opcional)", min_value=0.0, format="%.2f")
                     margem = 0
                     if preco_custo > 0:
                         margem = ((preco - preco_custo) / preco_custo) * 100
                         st.info(f"Margem calculada: {margem:.2f}%")
                 else:
-                    preco_custo = st.number_input("Preço de Custo", min_value=0.01, format="%.2f", value=float(produto.get('preco_custo', 0.01)))
-                    margem = st.slider("Margem de Lucro (%)", min_value=0, max_value=500, value=int(produto.get('margem', 30)))
+                    preco_custo = st.number_input("Preço de Custo*", min_value=0.01, format="%.2f")
+                    margem = st.slider("Margem de Lucro (%)*", min_value=0, max_value=500, value=30)
                     preco = preco_custo * (1 + margem/100)
                     st.info(f"Preço calculado: R$ {preco:.2f}")
                 
-                estoque = st.number_input("Estoque", min_value=0, value=int(produto.get('estoque', 0)))
-                marca = st.selectbox("Marca", marcas_lista,
-                                    index=marcas_lista.index(produto.get('marca')) if produto.get('marca') in marcas_lista else 0)
-                
+                estoque = st.number_input("Estoque*", min_value=0)
+                marca = st.selectbox("Marca*", marcas_lista)
+            
             col1, col2 = st.columns(2)
             with col1:
-                descricao = st.text_area("Descrição detalhada", value=produto.get('descricao', ''), height=100)
+                descricao = st.text_area("Descrição detalhada", height=100, 
+                                       placeholder="Informações adicionais sobre o produto...")
             
             with col2:
-                localizacao = st.text_input("Localização no Estoque", value=produto.get('localizacao', ''))
-                fornecedor = st.text_input("Fornecedor", value=produto.get('fornecedor', ''))
+                localizacao = st.text_input("Localização no Estoque", placeholder="Ex: Prateleira A3")
+                fornecedor = st.text_input("Fornecedor", placeholder="Nome do fornecedor")
             
-            foto_url = st.text_input("URL da Imagem", value=produto.get('foto', ''))
+            foto_url = st.text_input("URL da Imagem")
             
-            if st.form_submit_button("Atualizar Produto"):
-                if nome:
-                    st.session_state.produtos_db[codigo_editar].update({
+            if st.form_submit_button("Salvar Produto"):
+                if nome and codigo:
+                    st.session_state.produtos_db[codigo] = {
                         "nome": nome,
+                        "codigo_barras": codigo,
                         "grupo": grupo,
                         "marca": marca,
                         "preco": preco,
@@ -145,384 +584,121 @@
                         "descricao": descricao,
                         "localizacao": localizacao,
                         "fornecedor": fornecedor,
-                        "foto": foto_url if foto_url else produto.get('foto', "https://via.placeholder.com/150")
-                    })
-                    st.success("Produto atualizado com sucesso!")
+                        "foto": foto_url if foto_url else "https://via.placeholder.com/150"
+                    }
+                    st.success("Produto cadastrado!")
+                    
+                    if usar_scanner:
+                        st.session_state.ultimo_codigo = None
                 else:
-                    st.error("Nome do produto é obrigatório")
-    elif codigo_editar:
-        st.error("Produto não encontrado!")
-
-# Módulo de Cadastro de Cliente
-def cadastro_cliente():
-    st.header("👤 Cadastro de Cliente")
+                    st.error("Campos obrigatórios (*) não preenchidos")
     
-    try:
-        clientes_df = pd.read_csv(URL_CLIENTE)
-        st.info(f"Dados externos disponíveis: {len(clientes_df)} clientes")
-    except:
-        st.warning("Não foi possível carregar dados externos de clientes")
-    
-    with st.form("form_cliente"):
-        col1, col2 = st.columns(2)
+    with cadastro_tabs[1]:
+        st.subheader("Importar Produtos de Planilha")
         
-        with col1:
-            nome = st.text_input("Nome Completo")
-            documento = st.text_input("CPF/CNPJ")
-            email = st.text_input("Email")
+        st.markdown("""
+        ### Instruções para importação:
+        1. Baixe o modelo da planilha
+        2. Preencha com os dados dos produtos
+        3. Importe a planilha preenchida
+        """)
         
-        with col2:
-            telefone = st.text_input("Telefone")
-            endereco = st.text_input("Endereço")
-            cidade = st.text_input("Cidade")
-        
-        if st.form_submit_button("Salvar Cliente"):
-            novo_cliente = {
-                "ID": str(uuid.uuid4())[:8],
-                "NOME": nome,
-                "DOCUMENTO": documento,
-                "EMAIL": email,
-                "TELEFONE": telefone,
-                "ENDERECO": endereco,
-                "CIDADE": cidade
-            }
-            st.session_state.clientes_db.append(novo_cliente)
-            st.success("Cliente cadastrado!")
-    
-    st.subheader("Clientes Cadastrados")
-    if st.session_state.clientes_db:
-        st.dataframe(pd.DataFrame(st.session_state.clientes_db))
-    else:
-        try:
-            st.dataframe(clientes_df)
-        except:
-            st.info("Nenhum cliente cadastrado")
-
-# Módulo de Painel Financeiro
-def painel_financeiro():
-    st.header("📊 Painel Financeiro")
-    
-    try:
-        venda_ext_df = pd.read_csv(URL_VENDA)
-        venda_ext_df["DATA"] = pd.to_datetime(venda_ext_df["DATA"], errors="coerce")
-        st.success(f"Dados externos carregados: {len(venda_ext_df)} vendas")
-        
-        vendas_combinadas = st.session_state.vendas_db.copy()
-        st.info("Mostrando dados combinados: externos + locais")
-    except:
-        vendas_combinadas = st.session_state.vendas_db.copy()
-        st.warning("Dados externos indisponíveis. Mostrando apenas vendas locais.")
-    
-    if not vendas_combinadas:
-        st.warning("Nenhuma venda registrada")
-        return
-        
-    vendas_df = []
-    for venda in vendas_combinadas:
-        vendas_df.append({
-            "id": venda.get("id", ""),
-            "data": venda.get("data", ""),
-            "cliente": venda.get("cliente", ""),
-            "forma_pgto": venda.get("forma_pgto", ""),
-            "total": venda.get("total", 0)
+        modelo_df = pd.DataFrame({
+            "nome": ["Exemplo Produto"],
+            "codigo_barras": ["7891000000000"],
+            "grupo": ["Alimentos"],
+            "marca": ["Marca Exemplo"],
+            "preco_custo": [10.00],
+            "margem": [30.00],
+            "preco": [13.00],
+            "estoque": [50],
+            "unidade_medida": ["unidade"],
+            "descricao": ["Descrição do produto exemplo"],
+            "localizacao": ["Prateleira A1"],
+            "fornecedor": ["Fornecedor Exemplo"]
         })
-    
-    vendas_df = pd.DataFrame(vendas_df)
-    vendas_df["data"] = pd.to_datetime(vendas_df["data"], errors="coerce")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total de Vendas", f"{len(vendas_df)}")
-    with col2:
-        st.metric("Faturamento Total", f"R$ {vendas_df['total'].sum():.2f}")
-    with col3:
-        st.metric("Ticket Médio", f"R$ {vendas_df['total'].mean():.2f}")
-    
-    st.subheader("Filtros")
-    col1, col2 = st.columns(2)
-    with col1:
-        hoje = datetime.now().date()
-        data_inicio = st.date_input("Data Inicial", 
-                                  value=hoje - pd.Timedelta(days=30),
-                                  max_value=hoje)
-    with col2:
-        data_fim = st.date_input("Data Final", 
-                               value=hoje,
-                               max_value=hoje)
-    
-    mask = (vendas_df["data"].dt.date >= data_inicio) & (vendas_df["data"].dt.date <= data_fim)
-    vendas_filtradas = vendas_df[mask]
-    
-    if len(vendas_filtradas) == 0:
-        st.warning("Nenhuma venda no período selecionado")
-        return
-    
-    st.subheader("Análise de Vendas")
-    vendas_por_dia = vendas_filtradas.groupby(vendas_filtradas["data"].dt.date)["total"].sum().reset_index()
-    vendas_por_dia.columns = ["data", "total"]
-    st.line_chart(vendas_por_dia.set_index("data"))
-    
-    st.subheader("Vendas por Forma de Pagamento")
-    vendas_por_pgto = vendas_filtradas.groupby("forma_pgto")["total"].sum().reset_index()
-    st.bar_chart(vendas_por_pgto.set_index("forma_pgto"))
-    
-    st.subheader("Lista de Vendas no Período")
-    st.dataframe(vendas_filtradas[["id", "data", "cliente", "forma_pgto", "total"]])
-
-# Módulo de Histórico de Vendas
-def historico_vendas():
-    st.header("📜 Histórico de Vendas")
-    
-    if not st.session_state.vendas_db:
-        st.warning("Nenhuma venda registrada")
-        return
-    
-    st.subheader("Filtros")
-    col1, col2 = st.columns(2)
-    with col1:
-        hoje = datetime.now().date()
-        data_inicio = st.date_input("Data Inicial", 
-                                  value=hoje - pd.Timedelta(days=30),
-                                  max_value=hoje,
-                                  key="hist_data_inicio")
-    with col2:
-        data_fim = st.date_input("Data Final", 
-                               value=hoje,
-                               max_value=hoje,
-                               key="hist_data_fim")
-    
-    st.subheader("Vendas Realizadas")
-    
-    for venda in reversed(st.session_state.vendas_db):
-        data_venda = datetime.strptime(venda["data"], "%Y-%m-%d %H:%M:%S").date()
-        if data_inicio <= data_venda <= data_fim:
-            with st.expander(f"Venda #{venda['id']} - {venda['data']} - R$ {venda['total']:.2f}"):
-                st.write(f"**Cliente:** {venda['cliente']}")
-                st.write(f"**Forma de Pagamento:** {venda['forma_pgto']}")
-                st.write(f"**Total:** R$ {venda['total']:.2f}")
-                
-                items_df = pd.DataFrame(venda["itens"])
-                st.dataframe(items_df[["produto", "quantidade", "preco_unit", "total"]])
-                
-                if st.button("Reimprimir Recibo", key=f"reimp_{venda['id']}"):
-                    recibo_html = gerar_recibo_html(venda)
-                    st.components.v1.html(recibo_html, height=600)
-                    st.download_button(
-                        "📄 Baixar Recibo",
-                        recibo_html,
-                        f"recibo_{venda['id']}.html",
-                        "text/html"
-                    )
-
-# Módulo de Gerenciamento de Estoque
-def gerenciar_estoque():
-    st.header("🗃️ Gerenciamento de Estoque")
-    
-    st.subheader("Estoque Atual")
-    
-    produtos_df = pd.DataFrame(st.session_state.produtos_db.values())
-    if not produtos_df.empty:
-        st.dataframe(produtos_df[["nome", "codigo_barras", "preco", "estoque", "grupo", "marca"]])
-    else:
-        st.warning("Nenhum produto cadastrado")
-    
-    st.subheader("Entrada de Estoque")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        produtos = list(st.session_state.produtos_db.values())
-        nomes_produtos = [p["nome"] for p in produtos]
-        produto_selecionado = st.selectbox("Selecione o Produto", nomes_produtos)
-    
-    with col2:
-        quantidade = st.number_input("Quantidade", min_value=1, value=1)
-    
-    if st.button("Registrar Entrada", type="primary"):
-        codigo = None
-        for c, p in st.session_state.produtos_db.items():
-            if p["nome"] == produto_selecionado:
-                codigo = c
-                break
         
-        if codigo:
-            st.session_state.produtos_db[codigo]["estoque"] += quantidade
-            st.success(f"Adicionadas {quantidade} unidades de {produto_selecionado} ao estoque!")
-            st.rerun()
-    
-    st.subheader("Alertas de Estoque Baixo")
-    
-    produtos_baixo_estoque = []
-    for codigo, produto in st.session_state.produtos_db.items():
-        if produto["estoque"] < 10:
-            produtos_baixo_estoque.append(produto)
-    
-    if produtos_baixo_estoque:
-        st.warning(f"{len(produtos_baixo_estoque)} produtos com estoque crítico")
-        
-        for produto in produtos_baixo_estoque:
-            st.error(f"⚠️ {produto['nome']} - Estoque: {produto['estoque']} unidades")
-    else:
-        st.success("Todos os produtos com estoque adequado")
-
-# Configurações do Sistema
-def configuracoes_sistema():
-    st.header("⚙️ Configurações do Sistema")
-    
-    st.subheader("Informações da Empresa")
-    
-    with st.form("form_config"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            nome_empresa = st.text_input("Nome da Empresa", value="ORION PDV")
-            cnpj = st.text_input("CNPJ")
-            telefone = st.text_input("Telefone")
-        
-        with col2:
-            endereco = st.text_input("Endereço")
-            cidade = st.text_input("Cidade/UF")
-            email = st.text_input("Email")
-        
-        logo_url = st.text_input("URL da Logo", value="https://github.com/jesusmjunior/pdv2022/blob/69ff7f9ecaa6209d10cec3ea589f803b56180c32/logo.webp")
-        
-        if st.form_submit_button("Salvar Configurações"):
-            st.success("Configurações salvas!")
-    
-    st.subheader("Backup de Dados")
-    
-    if st.button("Exportar Dados"):
-        dados_exportacao = {
-            "produtos": st.session_state.produtos_db,
-            "vendas": st.session_state.vendas_db,
-            "clientes": st.session_state.clientes_db,
-            "data_exportacao": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        json_str = pd.Series(dados_exportacao).to_json()
-        
+        csv = modelo_df.to_csv(index=False)
         st.download_button(
-            label="📥 Baixar Arquivo de Backup",
-            data=json_str,
-            file_name=f"backup_orion_pdv_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json"
+            label="📥 Baixar Modelo de Planilha",
+            data=csv,
+            file_name="modelo_produtos.csv",
+            mime="text/csv"
         )
         
-        st.success("Backup gerado com sucesso!")
-    
-    st.subheader("Importar Backup")
-    
-    arquivo_importacao = st.file_uploader("Selecione o arquivo de backup", type=["json"])
-    
-    if arquivo_importacao is not None:
-        try:
-            dados_importados = pd.read_json(arquivo_importacao, typ="series")
-            
-            if st.button("Confirmar Importação", type="primary"):
-                st.session_state.produtos_db = dados_importados["produtos"]
-                st.session_state.vendas_db = dados_importados["vendas"]
-                st.session_state.clientes_db = dados_importados["clientes"]
+        uploaded_file = st.file_uploader("Selecione a planilha com produtos", type=["csv", "xlsx"])
+        
+        if uploaded_file is not None:
+            try:
+                if uploaded_file.name.endswith('.csv'):
+                    import_df = pd.read_csv(uploaded_file)
+                else:
+                    import_df = pd.read_excel(uploaded_file)
                 
-                st.success("Dados importados com sucesso!")
-                st.info(f"Data do backup: {dados_importados['data_exportacao']}")
-        except Exception as e:
-            st.error(f"Erro ao importar arquivo: {e}")
-
-# Função para exibir a página Sobre
-def sobre():
-    st.header("ℹ️ Sobre o ORION PDV")
+                st.success(f"Planilha carregada com {len(import_df)} produtos")
+                st.dataframe(import_df)
+                
+                if st.button("Confirmar Importação", type="primary"):
+                    cont_import = 0
+                    for _, row in import_df.iterrows():
+                        try:
+                            codigo = str(row['codigo_barras'])
+                            
+                            preco = float(row.get('preco', 0))
+                            preco_custo = float(row.get('preco_custo', 0))
+                            margem = float(row.get('margem', 0))
+                            estoque = int(row.get('estoque', 0))
+                            
+                            st.session_state.produtos_db[codigo] = {
+                                "nome": row.get('nome', ''),
+                                "codigo_barras": codigo,
+                                "grupo": row.get('grupo', 'Diversos'),
+                                "marca": row.get('marca', 'Outras'),
+                                "preco": preco,
+                                "preco_custo": preco_custo,
+                                "margem": margem,
+                                "estoque": estoque,
+                                "unidade_medida": row.get('unidade_medida', 'unidade'),
+                                "descricao": row.get('descricao', ''),
+                                "localizacao": row.get('localizacao', ''),
+                                "fornecedor": row.get('fornecedor', ''),
+                                "foto": row.get('foto', "https://via.placeholder.com/150")
+                            }
+                            cont_import += 1
+                        except Exception as e:
+                            st.error(f"Erro ao importar linha: {e}")
+                    
+                    st.success(f"{cont_import} produtos importados com sucesso!")
+            except Exception as e:
+                st.error(f"Erro ao processar o arquivo: {e}")
     
-    st.image("https://i.imgur.com/Ka8kNST.png", width=200)
-    
-    st.markdown("""
-    ### Sistema de Ponto de Venda ORION
-    
-    Versão 1.0.0
-    
-    O **ORION PDV** é um sistema de ponto de venda completo desenvolvido em Python com Streamlit.
-    
-    #### Principais Funcionalidades:
-    
-    - 📱 Scanner de código de barras assistido
-    - 🧾 Registro de vendas simplificado
-    - 📦 Cadastro de produtos
-    - 👤 Cadastro de clientes
-    - 🗃️ Gerenciamento de estoque
-    - 📊 Relatórios financeiros
-    - 🔐 Sistema de autenticação
-    
-    #### Tecnologias Utilizadas:
-    
-    - Python
-    - Streamlit
-    - Pandas
-    - Google Sheets (para integração de dados)
-    
-    © 2025 - Todos os direitos reservados- ADM. JESUS MARTINS OLIVEIRA JUNIOR 
-    """)
-    
-    st.divider()
-    
-    st.markdown("Desenvolvido por Orion Software Solutions")
-
-# Função principal para a barra lateral
-def sidebar():
-    with st.sidebar:
-        st.image("https://i.imgur.com/Ka8kNST.png", width=200)
-        st.title("ORION PDV")
+    with cadastro_tabs[2]:
+        st.subheader("Importar de Nota Fiscal")
         
-        pagina = st.selectbox(
-            "Menu Principal",
-            [
-                "🧾 Registrar Venda",
-                "📦 Cadastrar Produto",
-                "👤 Cadastrar Cliente",
-                "📊 Painel Financeiro",
-                "📜 Histórico de Vendas",
-                "🗃️ Gerenciar Estoque",
-                "⚙️ Configurações",
-                "ℹ️ Sobre"
-            ]
-        )
+        st.info("Esta função permite extrair produtos de notas fiscais eletrônicas (XML)")
         
-        st.divider()
+        uploaded_nf = st.file_uploader("Selecione o arquivo XML da Nota Fiscal", type=["xml"])
         
-        st.write(f"📅 {datetime.now().strftime('%d/%m/%Y')}")
-        st.write(f"🕒 {datetime.now().strftime('%H:%M:%S')}")
-        
-        if "usuario" in st.session_state:
-            st.write(f"👤 Usuário: {USUARIOS[st.session_state.usuario]['nome']}")
+        if uploaded_nf is not None:
+            st.success("Arquivo carregado com sucesso!")
             
-            if st.button("Sair", type="primary"):
-                st.session_state.clear()
-                st.rerun()
-    
-    return pagina
-
-# Função principal
-def main():
-    if "autenticado" not in st.session_state or not st.session_state.autenticado:
-        autenticar_usuario()
-        return
-    
-    pagina = sidebar()
-    
-    if pagina == "🧾 Registrar Venda":
-        registrar_venda()
-    elif pagina == "📦 Cadastrar Produto":
-        cadastro_produto()
-    elif pagina == "👤 Cadastrar Cliente":
-        cadastro_cliente()
-    elif pagina == "📊 Painel Financeiro":
-        painel_financeiro()
-    elif pagina == "📜 Histórico de Vendas":
-        historico_vendas()
-    elif pagina == "🗃️ Gerenciar Estoque":
-        gerenciar_estoque()
-    elif pagina == "⚙️ Configurações":
-        configuracoes_sistema()
-    elif pagina == "ℹ️ Sobre":
-        sobre()
-
-# Executar o aplicativo
-if __name__ == "__main__":
-    main()
+            produtos_nf = processar_xml_nfe(uploaded_nf)
+            
+            if not produtos_nf:
+                st.error("Não foi possível extrair produtos da nota fiscal")
+                return
+            
+            st.subheader("Produtos encontrados na nota")
+            
+            for produto in produtos_nf:
+                with st.expander(f"{produto['descricao']} - R$ {produto['valor_unit']:.2f}"):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.write(f"**Código:** {produto['codigo']}")
+                        st.write(f"**Quantidade:** {produto['qtd']}")
+                        st.write(f"**Unidade:** {produto['unidade']}")
+                    
+                    with col2:
+                        st.write(f"**Valor Unit.:** R$ {produto['valor_unit']:.2f}")
+                        margem_nf = st.slider
