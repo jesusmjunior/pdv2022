@@ -576,8 +576,6 @@ def registrar_venda():
                 st.warning("Nenhum produto encontrado.")
     
     with busca_tabs[1]:
-        codigo_barras =
-# Scanner de código de barras assistido (continuação)
         codigo_barras = leitor_codigo_barras()
         
         if codigo_barras and codigo_barras in st.session_state.produtos_db:
