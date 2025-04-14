@@ -51,7 +51,70 @@ URLS = {
 from types import SimpleNamespace
 
 def modulo_upload_documento():
-    st.warning("Função 'modulo_upload_documento()' ainda não implementada neste script.")
+    st.header("📄 Upload de Documento - Nota Fiscal ou Cupom")
+    st.markdown("""
+    <div style="background-color:#f9f9f9; padding:15px; border-left:4px solid #2196f3; margin-bottom:20px;">
+        <b>Instruções:</b><br>
+        1. Faça upload de uma imagem (JPG/PNG)<br>
+        2. O sistema usará <i>Google Vision</i> para extrair o texto<br>
+        3. Verifique e edite os dados extraídos conforme necessário
+    </div>
+    """, unsafe_allow_html=True)
+
+    imagem_upload = st.file_uploader("📌 Enviar Imagem da Nota/Cupom", type=["jpg", "jpeg", "png"])
+
+    if imagem_upload:
+        try:
+            img_preview = Image.open(imagem_upload)
+            st.image(img_preview, caption="📷 Pré-visualização da Imagem", use_column_width=True)
+
+            with st.spinner("🔍 Extraindo texto via Google Vision..."):
+                texto_extraido = extrair_texto_google_vision(img_preview)
+
+            if texto_extraido:
+                st.success("✅ Texto extraído com sucesso!")
+                with st.expander("📜 Texto OCR Extraído"):
+                    st.text_area("Conteúdo Detectado:", value=texto_extraido, height=250)
+
+                tipo_documento = st.selectbox("Tipo de Documento", ["Imagem de Nota", "Cupom"])
+
+                if st.button("Analisar Produtos"):
+                    st.info("Chamaria interface_importar_produtos(texto_extraido, tipo_documento)")
+            else:
+                st.warning("⚠️ Nenhum texto detectado na imagem.")
+        except Exception as e:
+            st.error(f"Erro ao processar imagem: {str(e)}")
+
+def extrair_texto_google_vision(imagem_pil):
+    buffered = io.BytesIO()
+    imagem_pil.save(buffered, format="JPEG")
+    img_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+    payload = {
+        "requests": [{
+            "image": {"content": img_base64},
+            "features": [{"type": "TEXT_DETECTION"}]
+        }]
+    }
+
+    try:
+        response = requests.post(
+            url="https://vision.googleapis.com/v1/images:annotate",
+            params={"key": google_vision_credentials["private_key_id"]},
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload)
+        )
+
+        data = response.json()
+        if 'responses' in data and data['responses'] and 'textAnnotations' in data['responses'][0]:
+            texto = data['responses'][0]['textAnnotations'][0]['description']
+            return texto
+        else:
+            st.error("Não foi possível detectar texto na imagem.")
+            return ""
+    except Exception as e:
+        st.error(f"Erro ao processar OCR com Google Vision: {str(e)}")
+        return ""
 
 def registrar_venda():
     st.warning("Função 'registrar_venda()' ainda não implementada neste script.")
@@ -63,7 +126,46 @@ def cadastro_cliente():
     st.warning("Função 'cadastro_cliente()' ainda não implementada neste script.")
 
 def painel_financeiro():
-    st.warning("Função 'painel_financeiro()' ainda não implementada neste script.")
+    st.header("\U0001F4CA Painel Financeiro")
+
+    vendas_combinadas = []
+    try:
+        df_ext = pd.read_csv(URLS["venda"])
+        df_ext["DATA"] = pd.to_datetime(df_ext["DATA"], errors="coerce")
+        vendas_combinadas.extend(df_ext.to_dict(orient="records"))
+        st.success(f"\u2705 {len(df_ext)} vendas externas carregadas")
+    except Exception as e:
+        st.warning(f"\u26a0\ufe0f Dados externos n\u00e3o acess\u00edveis: {str(e)}")
+
+    vendas_combinadas.extend(st.session_state.vendas_db)
+
+    if not vendas_combinadas:
+        st.info("\U0001F4AC Nenhuma venda registrada ainda.")
+        return
+
+    vendas_df = pd.DataFrame([
+        {
+            "ID": v.get("id", ""),
+            "DATA": pd.to_datetime(v.get("data", ""), errors="coerce"),
+            "CLIENTE": v.get("cliente", ""),
+            "PGTO": v.get("forma_pgto", ""),
+            "TOTAL": v.get("total", 0)
+        } for v in vendas_combinadas
+    ])
+
+    vendas_df.dropna(subset=["DATA"], inplace=True)
+
+    total_vendas = len(vendas_df)
+    soma_total = vendas_df["TOTAL"].sum()
+    ticket_medio = vendas_df["TOTAL"].mean()
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("\U0001F9FE Total de Vendas", f"{total_vendas}")
+    col2.metric("\U0001F4B0 Faturamento", f"R$ {soma_total:.2f}")
+    col3.metric("\U0001F4C8 Ticket M\u00e9dio", f"R$ {ticket_medio:.2f}")
+
+    with st.expander("\U0001F4C5 Vendas Registradas"):
+        st.dataframe(vendas_df.sort_values("DATA", ascending=False).reset_index(drop=True))
 
 # Menu Principal
 menu = st.sidebar.radio("🔺 Menu", [
