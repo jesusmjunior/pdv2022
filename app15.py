@@ -1,9 +1,8 @@
+# OBRIGATÓRIO: ISSO VEM PRIMEIRO
 import streamlit as st
-
-# 🔐 DEVE VIR PRIMEIRO DE TUDO
 st.set_page_config(page_title="ORION PDV I.A. 🔐 OCR via Google Vision", layout="wide")
 
-# ⬇️ Agora pode importar o restante
+# PODE VIR DEPOIS: todos os outros imports
 import pandas as pd
 import requests
 import base64
