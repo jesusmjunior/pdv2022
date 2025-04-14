@@ -593,42 +593,6 @@ def painel_financeiro():
         st.warning(f"⚠️ Dados externos não acessíveis: {str(e)}")
 
     vendas_combinadas.extend(st.session_state.vendas_db)# Lousa 1 - Módulo de Configuração e Integração com Google Vision
-import streamlit as st
-import pandas as pd
-import requests
-import base64
-import json
-import re
-from datetime import datetime
-import uuid
-import hashlib
-from PIL import Image
-import io
-
-# Configuração da Página
-st.set_page_config(page_title="ORION PDV I.A. 🔐 OCR via Google Vision", layout="wide")
-
-# Inicialização das variáveis de sessão
-if 'autenticado' not in st.session_state:
-    st.session_state.autenticado = False
-    
-if 'usuario' not in st.session_state:
-    st.session_state.usuario = None
-    
-if 'produtos_db' not in st.session_state:
-    st.session_state.produtos_db = {}
-    
-if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = []
-    
-if 'vendas_db' not in st.session_state:
-    st.session_state.vendas_db = []
-    
-if 'ultimo_codigo' not in st.session_state:
-    st.session_state.ultimo_codigo = None
-    
-if 'clientes_db' not in st.session_state:
-    st.session_state.clientes_db = []
 
 # Carregamento da chave do serviço (deve estar no mesmo diretório)
 try:
