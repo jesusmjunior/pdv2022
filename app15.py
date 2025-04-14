@@ -1,5 +1,9 @@
-# Lousa 1 - Módulo de Configuração e Integração com Google Vision
 import streamlit as st
+
+# 🔐 DEVE VIR PRIMEIRO DE TUDO
+st.set_page_config(page_title="ORION PDV I.A. 🔐 OCR via Google Vision", layout="wide")
+
+# ⬇️ Agora pode importar o restante
 import pandas as pd
 import requests
 import base64
@@ -10,9 +14,6 @@ import uuid
 import hashlib
 from PIL import Image
 import io
-
-# Configuração da Página
-st.set_page_config(page_title="ORION PDV I.A. 🔐 OCR via Google Vision", layout="wide")
 
 # Inicialização das variáveis de sessão
 if 'autenticado' not in st.session_state:
