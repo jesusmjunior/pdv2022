@@ -1,4 +1,3 @@
-# OBRIGATÓRIO: ISSO VEM PRIMEIRO
 import streamlit as st
 st.set_page_config(page_title="ORION PDV I.A. 🔐 OCR via Google Vision", layout="wide")
 
