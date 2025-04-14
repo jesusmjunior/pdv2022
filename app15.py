@@ -247,10 +247,106 @@ def gerar_recibo_html(venda):
     return html
 
 def cadastro_produto():
-    st.warning("Função 'cadastro_produto()' ainda não implementada neste script.")
+    st.header("📦 Cadastro de Produto")
+
+    try:
+        grupo_df = pd.read_csv(URLS["grupo"])
+        grupos = list(grupo_df["DESCRICAO"].dropna())
+    except:
+        grupos = ["Alimentos", "Higiene", "Limpeza", "Diversos"]
+
+    try:
+        marca_df = pd.read_csv(URLS["marcas"])
+        marcas = list(marca_df["DESCRICAO"].dropna())
+    except:
+        marcas = ["Outras", "Genérica", "Não Informada"]
+
+    usar_scanner = st.checkbox("📷 Usar scanner para obter o código")
+    if usar_scanner:
+        st.info("⚙️ Scanner ainda não implementado nesta versão.")
+        cod_lido = ""
+    else:
+        cod_lido = ""
+
+    with st.form("form_produto"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nome = st.text_input("Nome do Produto")
+            codigo = st.text_input("Código de Barras", value=cod_lido or st.session_state.get("ultimo_codigo", ""))
+            grupo = st.selectbox("Grupo", grupos)
+        with col2:
+            preco = st.number_input("Preço de Venda", min_value=0.01, step=0.01)
+            estoque = st.number_input("Estoque Inicial", min_value=0)
+            marca = st.selectbox("Marca", marcas)
+
+        foto_url = st.text_input("URL da Imagem do Produto")
+
+        if st.form_submit_button("Salvar Produto"):
+            if nome and codigo:
+                st.session_state.produtos_db[codigo] = {
+                    "nome": nome,
+                    "codigo_barras": codigo,
+                    "grupo": grupo,
+                    "marca": marca,
+                    "preco": preco,
+                    "estoque": estoque,
+                    "foto": foto_url or "https://via.placeholder.com/150"
+                }
+                st.success("Produto cadastrado com sucesso!")
+                st.session_state.ultimo_codigo = None
+            else:
+                st.error("⚠️ Nome e código de barras são obrigatórios.")
+
+    st.subheader("📋 Produtos no Sistema")
+    if st.session_state.produtos_db:
+        produtos_df = pd.DataFrame(st.session_state.produtos_db.values())
+        st.dataframe(produtos_df[["nome", "codigo_barras", "preco", "estoque"]])
+    else:
+        st.info("Nenhum produto cadastrado ainda.")
 
 def cadastro_cliente():
-    st.warning("Função 'cadastro_cliente()' ainda não implementada neste script.")
+    st.header("👤 Cadastro de Cliente")
+
+    try:
+        clientes_ext = pd.read_csv(URLS["cliente"])
+        st.success(f"✅ {len(clientes_ext)} clientes carregados do Google Sheets")
+    except:
+        clientes_ext = pd.DataFrame()
+        st.warning("⚠️ Não foi possível carregar os dados externos")
+
+    with st.form("form_cliente"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nome = st.text_input("Nome Completo")
+            doc = st.text_input("CPF ou CNPJ")
+            email = st.text_input("Email")
+        with col2:
+            tel = st.text_input("Telefone")
+            end = st.text_input("Endereço")
+            cidade = st.text_input("Cidade")
+
+        if st.form_submit_button("Salvar Cliente"):
+            novo = {
+                "ID": str(uuid.uuid4())[:8],
+                "NOME": nome,
+                "DOCUMENTO": doc,
+                "EMAIL": email,
+                "TELEFONE": tel,
+                "ENDERECO": end,
+                "CIDADE": cidade
+            }
+            if 'clientes_db' not in st.session_state:
+                st.session_state.clientes_db = []
+            st.session_state.clientes_db.append(novo)
+            st.success("🎉 Cliente cadastrado!")
+
+    st.subheader("📋 Lista de Clientes")
+    if st.session_state.get("clientes_db"):
+        st.dataframe(pd.DataFrame(st.session_state.clientes_db))
+    elif not clientes_ext.empty:
+        st.dataframe(clientes_ext[["NOME", "DOCUMENTO", "EMAIL", "CIDADE"]])
+    else:
+        st.info("Nenhum cliente disponível.")' ainda não implementada neste script.")
 
 def painel_financeiro():
     st.header("📊 Painel Financeiro")
