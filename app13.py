@@ -7,7 +7,6 @@ import uuid
 import hashlib
 from datetime import datetime
 from PIL import Image
-import pdfplumber
 import cv2
 import json
 
