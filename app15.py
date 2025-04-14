@@ -47,11 +47,23 @@ URLS = {
     "venda": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1817416820&single=true&output=csv"
 }
 
-# Importação de módulos internos do sistema
-from modulos.ocr import modulo_upload_documento
-from modulos.vendas import registrar_venda
-from modulos.cadastro import cadastro_produto, cadastro_cliente
-from modulos.financeiro import painel_financeiro
+# IMPORTAÇÃO DIRETA DAS FUNÇÕES EM VEZ DE MÓDULOS EXTERNOS
+from types import SimpleNamespace
+
+def modulo_upload_documento():
+    st.warning("Função 'modulo_upload_documento()' ainda não implementada neste script.")
+
+def registrar_venda():
+    st.warning("Função 'registrar_venda()' ainda não implementada neste script.")
+
+def cadastro_produto():
+    st.warning("Função 'cadastro_produto()' ainda não implementada neste script.")
+
+def cadastro_cliente():
+    st.warning("Função 'cadastro_cliente()' ainda não implementada neste script.")
+
+def painel_financeiro():
+    st.warning("Função 'painel_financeiro()' ainda não implementada neste script.")
 
 # Menu Principal
 menu = st.sidebar.radio("🔺 Menu", [
