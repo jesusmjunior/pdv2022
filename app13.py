@@ -6,7 +6,6 @@ import io
 import uuid
 import hashlib
 from datetime import datetime
-import pytesseract
 from PIL import Image
 import pdfplumber
 import cv2
