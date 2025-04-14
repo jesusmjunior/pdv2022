@@ -577,3 +577,558 @@ def registrar_venda():
     
     with busca_tabs[1]:
         codigo_barras =
+# Scanner de código de barras assistido (continuação)
+        codigo_barras = leitor_codigo_barras()
+        
+        if codigo_barras and codigo_barras in st.session_state.produtos_db:
+            produto = st.session_state.produtos_db[codigo_barras]
+            
+            quantidade = st.number_input(
+                "Quantidade",
+                min_value=1,
+                max_value=produto['estoque'],
+                value=1
+            )
+            
+            if st.button("Adicionar ao Carrinho", type="primary"):
+                item_existente = next((item for item in st.session_state.carrinho 
+                                     if item['codigo_barras'] == codigo_barras), None)
+                
+                if item_existente:
+                    item_existente['quantidade'] += quantidade
+                    item_existente['total'] = item_existente['quantidade'] * item_existente['preco_unit']
+                else:
+                    st.session_state.carrinho.append({
+                        "codigo_barras": codigo_barras,
+                        "produto": produto['nome'],
+                        "quantidade": quantidade,
+                        "preco_unit": produto['preco'],
+                        "total": quantidade * produto['preco'],
+                        "foto": produto['foto']
+                    })
+                
+                st.session_state.produtos_db[codigo_barras]['estoque'] -= quantidade
+                st.success(f"Adicionado {quantidade}x {produto['nome']} ao carrinho!")
+                st.rerun()
+    
+    # Mostrar carrinho
+    st.header("🛒 Carrinho de Compras")
+    
+    if not st.session_state.carrinho:
+        st.info("Seu carrinho está vazio. Adicione produtos para continuar.")
+    else:
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            for i, item in enumerate(st.session_state.carrinho):
+                with st.container():
+                    cols = st.columns([1, 3, 1, 1, 1])
+                    with cols[0]:
+                        st.image(item['foto'], width=50)
+                    with cols[1]:
+                        st.write(f"**{item['produto']}**")
+                    with cols[2]:
+                        st.write(f"{item['quantidade']} x R$ {item['preco_unit']:.2f}")
+                    with cols[3]:
+                        st.write(f"R$ {item['total']:.2f}")
+                    with cols[4]:
+                        if st.button("🗑️", key=f"remove_{i}"):
+                            # Devolver ao estoque
+                            st.session_state.produtos_db[item['codigo_barras']]['estoque'] += item['quantidade']
+                            # Remover do carrinho
+                            st.session_state.carrinho.pop(i)
+                            st.rerun()
+                st.divider()
+        
+        with col2:
+            total_venda = sum(item['total'] for item in st.session_state.carrinho)
+            st.metric("Total da Venda", f"R$ {total_venda:.2f}")
+            
+            opcoes_pgto = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Crediário"]
+            forma_pgto = st.selectbox("Forma de Pagamento", opcoes_pgto)
+            
+            clientes = ["Consumidor Final"] + [cliente["nome"] for cliente in st.session_state.clientes_db]
+            cliente_selecionado = st.selectbox("Cliente", clientes)
+            
+            if st.button("Finalizar Venda", type="primary"):
+                if not st.session_state.carrinho:
+                    st.error("Não é possível finalizar venda sem produtos.")
+                else:
+                    # Gerar ID para a venda
+                    venda_id = str(uuid.uuid4())[:8].upper()
+                    
+                    # Registrar a venda
+                    nova_venda = {
+                        "id": venda_id,
+                        "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "cliente": cliente_selecionado,
+                        "forma_pgto": forma_pgto,
+                        "itens": [
+                            {
+                                "produto": item["produto"],
+                                "quantidade": item["quantidade"],
+                                "preco_unit": item["preco_unit"],
+                                "total": item["total"]
+                            } for item in st.session_state.carrinho
+                        ],
+                        "total": total_venda
+                    }
+                    
+                    st.session_state.vendas_db.append(nova_venda)
+                    
+                    # Gerar recibo
+                    recibo_html = gerar_recibo_html(nova_venda)
+                    
+                    # Limpar carrinho
+                    st.session_state.carrinho = []
+                    
+                    # Mostrar confirmação
+                    st.success(f"Venda {venda_id} registrada com sucesso!")
+                    
+                    # Botão para imprimir recibo
+                    st.markdown(f"""
+                        <a href="data:text/html;charset=utf-8,{recibo_html}" 
+                           download="recibo_{venda_id}.html" 
+                           target="_blank" 
+                           style="text-decoration:none;">
+                            <button style="
+                                background-color: #4CAF50;
+                                color: white;
+                                padding: 10px 24px;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 16px;">
+                                📄 Imprimir Recibo
+                            </button>
+                        </a>
+                    """, unsafe_allow_html=True)
+                    
+                    # Mostrar detalhes da venda
+                    with st.expander("Detalhes da Venda"):
+                        st.json(nova_venda)
+
+# Módulo de Cadastro de Produtos
+def cadastrar_produto():
+    st.header("📦 Cadastro de Produtos")
+    
+    # Carregar dados de grupos e marcas
+    try:
+        grupos_df = pd.read_csv(URL_GRUPO)
+        grupos = grupos_df["nome"].tolist()
+    except:
+        grupos = ["Alimentos", "Bebidas", "Limpeza", "Higiene", "Outros"]
+
+    try:
+        marcas_df = pd.read_csv(URL_MARCAS)
+        marcas = marcas_df["nome"].tolist()
+    except:
+        marcas = ["Diversos", "Importado", "Nacional", "Própria"]
+    
+    # Tabs para listar e cadastrar
+    tab1, tab2 = st.tabs(["Listar Produtos", "Cadastrar Novo"])
+    
+    with tab1:
+        st.subheader("Produtos Cadastrados")
+        
+        # Filtros
+        col1, col2 = st.columns(2)
+        with col1:
+            filtro_grupo = st.selectbox("Filtrar por Grupo", ["Todos"] + grupos)
+        with col2:
+            termo_busca = st.text_input("Buscar por Nome ou Código")
+        
+        # Converter dicionário em DataFrame
+        produtos_df = pd.DataFrame(st.session_state.produtos_db.values())
+        
+        # Aplicar filtros
+        if filtro_grupo != "Todos":
+            produtos_df = produtos_df[produtos_df["grupo"] == filtro_grupo]
+        
+        if termo_busca:
+            produtos_df = produtos_df[
+                (produtos_df["nome"].str.contains(termo_busca, case=False)) | 
+                (produtos_df["codigo_barras"].str.contains(termo_busca, case=False))
+            ]
+        
+        # Exibir produtos
+        if not produtos_df.empty:
+            for i, (_, produto) in enumerate(produtos_df.iterrows()):
+                with st.container():
+                    col1, col2, col3 = st.columns([1, 3, 1])
+                    
+                    with col1:
+                        st.image(produto['foto'], width=100)
+                    
+                    with col2:
+                        st.subheader(produto['nome'])
+                        st.write(f"**Código:** {produto['codigo_barras']}")
+                        st.write(f"**Grupo:** {produto['grupo']} | **Marca:** {produto['marca']}")
+                        st.write(f"**Preço:** R$ {produto['preco']:.2f} | **Estoque:** {produto['estoque']} unidades")
+                    
+                    with col3:
+                        # Botões de ação
+                        st.button("✏️ Editar", key=f"edit_{i}")
+                        st.button("🗑️ Excluir", key=f"del_{i}")
+                
+                st.divider()
+        else:
+            st.info("Nenhum produto encontrado com os filtros selecionados.")
+    
+    with tab2:
+        st.subheader("Cadastrar Novo Produto")
+        
+        with st.form("form_cadastro_produto"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                nome = st.text_input("Nome do Produto*", placeholder="Ex: Arroz Integral 1kg")
+                codigo_barras = st.text_input("Código de Barras*", placeholder="Ex: 7891000315507")
+                grupo = st.selectbox("Grupo*", grupos)
+                marca = st.selectbox("Marca*", marcas)
+            
+            with col2:
+                preco = st.number_input("Preço de Venda* (R$)", min_value=0.01, step=0.50, format="%.2f")
+                preco_custo = st.number_input("Preço de Custo (R$)", min_value=0.01, step=0.50, format="%.2f")
+                estoque = st.number_input("Estoque Inicial*", min_value=0, step=1)
+                foto_url = st.text_input("URL da Foto", placeholder="https://exemplo.com/imagem.jpg", 
+                                       value="https://via.placeholder.com/150")
+            
+            submeter = st.form_submit_button("Cadastrar Produto", type="primary")
+            
+            if submeter:
+                if not nome or not codigo_barras or not grupo or not marca or preco <= 0:
+                    st.error("Por favor, preencha todos os campos obrigatórios.")
+                elif codigo_barras in st.session_state.produtos_db:
+                    st.error(f"Código de barras {codigo_barras} já existe no cadastro.")
+                else:
+                    # Calcular margem de lucro
+                    if preco_custo > 0:
+                        margem_lucro = ((preco - preco_custo) / preco_custo) * 100
+                    else:
+                        margem_lucro = 0
+                    
+                    # Adicionar ao banco de dados
+                    st.session_state.produtos_db[codigo_barras] = {
+                        "nome": nome,
+                        "codigo_barras": codigo_barras,
+                        "grupo": grupo,
+                        "marca": marca,
+                        "preco": preco,
+                        "preco_custo": preco_custo,
+                        "margem_lucro": margem_lucro,
+                        "estoque": estoque,
+                        "foto": foto_url
+                    }
+                    
+                    st.success(f"Produto '{nome}' cadastrado com sucesso!")
+
+# Módulo de cadastro de clientes
+def cadastrar_cliente():
+    st.header("👥 Cadastro de Clientes")
+    
+    tab1, tab2 = st.tabs(["Listar Clientes", "Novo Cliente"])
+    
+    with tab1:
+        st.subheader("Clientes Cadastrados")
+        
+        # Carregar clientes (tentar da planilha, senão usar da sessão)
+        try:
+            clientes_df = pd.read_csv(URL_CLIENTE)
+        except:
+            if st.session_state.clientes_db:
+                clientes_df = pd.DataFrame(st.session_state.clientes_db)
+            else:
+                st.info("Nenhum cliente cadastrado.")
+                clientes_df = pd.DataFrame()
+        
+        if not clientes_df.empty:
+            busca = st.text_input("Buscar cliente por nome ou telefone:")
+            
+            if busca:
+                clientes_filtrados = clientes_df[
+                    (clientes_df["nome"].str.contains(busca, case=False)) | 
+                    (clientes_df["telefone"].str.contains(busca, case=False))
+                ]
+            else:
+                clientes_filtrados = clientes_df
+            
+            for _, cliente in clientes_filtrados.iterrows():
+                with st.container():
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.subheader(cliente["nome"])
+                        st.write(f"📱 **Telefone:** {cliente['telefone']}")
+                        st.write(f"📧 **Email:** {cliente.get('email', 'Não informado')}")
+                        st.write(f"📍 **Endereço:** {cliente.get('endereco', 'Não informado')}")
+                    
+                    with col2:
+                        st.button("✏️ Editar", key=f"edit_cliente_{cliente['id']}")
+                        st.button("🔍 Ver Histórico", key=f"hist_cliente_{cliente['id']}")
+                
+                st.divider()
+    
+    with tab2:
+        st.subheader("Cadastrar Novo Cliente")
+        
+        with st.form("form_cadastro_cliente"):
+            nome = st.text_input("Nome Completo*")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                telefone = st.text_input("Telefone*", placeholder="(99) 99999-9999")
+                endereco = st.text_input("Endereço")
+            
+            with col2:
+                email = st.text_input("E-mail")
+                doc = st.text_input("CPF/CNPJ")
+            
+            observacoes = st.text_area("Observações", height=100)
+            
+            submeter = st.form_submit_button("Cadastrar Cliente", type="primary")
+            
+            if submeter:
+                if not nome or not telefone:
+                    st.error("Nome e telefone são campos obrigatórios.")
+                else:
+                    # Gerar ID único
+                    cliente_id = str(uuid.uuid4())[:8]
+                    
+                    # Adicionar ao banco de dados
+                    novo_cliente = {
+                        "id": cliente_id,
+                        "nome": nome,
+                        "telefone": telefone,
+                        "email": email,
+                        "endereco": endereco,
+                        "documento": doc,
+                        "observacoes": observacoes,
+                        "data_cadastro": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    
+                    st.session_state.clientes_db.append(novo_cliente)
+                    st.success(f"Cliente '{nome}' cadastrado com sucesso!")
+
+# Módulo de relatórios
+def gerar_relatorios():
+    st.header("📊 Relatórios")
+    
+    tab1, tab2, tab3 = st.tabs(["Vendas", "Estoque", "Financeiro"])
+    
+    with tab1:
+        st.subheader("Relatório de Vendas")
+        
+        # Converter vendas em DataFrame
+        vendas_df = pd.DataFrame(st.session_state.vendas_db)
+        
+        if not vendas_df.empty:
+            # Filtros
+            col1, col2 = st.columns(2)
+            with col1:
+                data_inicio = st.date_input("Data Inicial")
+            with col2:
+                data_fim = st.date_input("Data Final")
+            
+            # Converter datas para comparação
+            vendas_df['data_dt'] = pd.to_datetime(vendas_df['data'])
+            filtro_data = (vendas_df['data_dt'].dt.date >= data_inicio) & (vendas_df['data_dt'].dt.date <= data_fim)
+            vendas_filtradas = vendas_df[filtro_data]
+            
+            # Estatísticas
+            if not vendas_filtradas.empty:
+                total_vendas = len(vendas_filtradas)
+                valor_total = vendas_filtradas['total'].sum()
+                ticket_medio = valor_total / total_vendas if total_vendas > 0 else 0
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total de Vendas", f"{total_vendas}")
+                with col2:
+                    st.metric("Valor Total", f"R$ {valor_total:.2f}")
+                with col3:
+                    st.metric("Ticket Médio", f"R$ {ticket_medio:.2f}")
+                
+                # Gráfico de vendas por dia
+                vendas_por_dia = vendas_filtradas.groupby(vendas_filtradas['data_dt'].dt.date)['total'].sum().reset_index()
+                vendas_por_dia.columns = ['Data', 'Total']
+                
+                st.subheader("Vendas por Dia")
+                st.line_chart(vendas_por_dia.set_index('Data'))
+                
+                # Lista de vendas
+                st.subheader("Lista de Vendas")
+                for _, venda in vendas_filtradas.iterrows():
+                    with st.expander(f"Venda #{venda['id']} - {venda['data']} - R$ {venda['total']:.2f}"):
+                        st.write(f"**Cliente:** {venda['cliente']}")
+                        st.write(f"**Forma de Pagamento:** {venda['forma_pgto']}")
+                        
+                        st.subheader("Itens")
+                        for item in venda['itens']:
+                            st.write(f"• {item['quantidade']}x {item['produto']} - R$ {item['preco_unit']:.2f} = R$ {item['total']:.2f}")
+            else:
+                st.info("Nenhuma venda encontrada no período selecionado.")
+        else:
+            st.info("Nenhuma venda registrada no sistema.")
+    
+    with tab2:
+        st.subheader("Relatório de Estoque")
+        
+        # Converter produtos em DataFrame
+        produtos_df = pd.DataFrame(st.session_state.produtos_db.values())
+        
+        if not produtos_df.empty:
+            # Filtros
+            filtro_grupo = st.selectbox("Filtrar por Grupo", ["Todos"] + produtos_df["grupo"].unique().tolist())
+            mostrar_zerados = st.checkbox("Mostrar itens com estoque zerado")
+            
+            # Aplicar filtros
+            if filtro_grupo != "Todos":
+                produtos_filtrados = produtos_df[produtos_df["grupo"] == filtro_grupo]
+            else:
+                produtos_filtrados = produtos_df
+            
+            if not mostrar_zerados:
+                produtos_filtrados = produtos_filtrados[produtos_filtrados["estoque"] > 0]
+            
+            # Estatísticas
+            total_produtos = len(produtos_filtrados)
+            valor_estoque = (produtos_filtrados["preco"] * produtos_filtrados["estoque"]).sum()
+            estoque_baixo = produtos_filtrados[produtos_filtrados["estoque"] <= 5].shape[0]
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total de Produtos", f"{total_produtos}")
+            with col2:
+                st.metric("Valor em Estoque", f"R$ {valor_estoque:.2f}")
+            with col3:
+                st.metric("Estoque Baixo", f"{estoque_baixo} produtos")
+            
+            # Gráfico de estoque por grupo
+            estoque_por_grupo = produtos_filtrados.groupby("grupo")["estoque"].sum().reset_index()
+            st.subheader("Estoque por Grupo")
+            st.bar_chart(estoque_por_grupo.set_index("grupo"))
+            
+            # Lista de produtos
+            st.subheader("Lista de Produtos")
+            produtos_ordenados = produtos_filtrados.sort_values("estoque", ascending=True)
+            for _, produto in produtos_ordenados.iterrows():
+                cor_estoque = "red" if produto["estoque"] <= 5 else "green"
+                with st.container():
+                    col1, col2, col3 = st.columns([1, 3, 1])
+                    with col1:
+                        st.image(produto["foto"], width=50)
+                    with col2:
+                        st.write(f"**{produto['nome']}** ({produto['codigo_barras']})")
+                        st.write(f"**Grupo:** {produto['grupo']} | **Marca:** {produto['marca']}")
+                    with col3:
+                        st.markdown(f"<p style='color:{cor_estoque};font-weight:bold;'>Estoque: {produto['estoque']}</p>", unsafe_allow_html=True)
+                        st.write(f"R$ {produto['preco']:.2f}")
+                st.divider()
+        else:
+            st.info("Nenhum produto cadastrado no sistema.")
+    
+    with tab3:
+        st.subheader("Relatório Financeiro")
+        
+        # Converter vendas em DataFrame
+        vendas_df = pd.DataFrame(st.session_state.vendas_db)
+        
+        if not vendas_df.empty:
+            # Filtros
+            col1, col2 = st.columns(2)
+            with col1:
+                mes = st.selectbox("Mês", ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+                                       "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"])
+            with col2:
+                ano = st.selectbox("Ano", range(2023, 2026))
+            
+            # Mapear mês para número
+            meses = {"Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6, 
+                    "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12}
+            
+            mes_num = meses[mes]
+            
+            # Converter datas para comparação
+            vendas_df['data_dt'] = pd.to_datetime(vendas_df['data'])
+            filtro_mes = (vendas_df['data_dt'].dt.month == mes_num) & (vendas_df['data_dt'].dt.year == ano)
+            vendas_mes = vendas_df[filtro_mes]
+            
+            # Estatísticas
+            if not vendas_mes.empty:
+                receita_total = vendas_mes['total'].sum()
+                
+                # Calcular custo (baseado nos produtos vendidos)
+                custo_total = 0
+                for _, venda in vendas_mes.iterrows():
+                    for item in venda['itens']:
+                        codigo = next((k for k, v in st.session_state.produtos_db.items() 
+                                    if v['nome'] == item['produto']), None)
+                        if codigo:
+                            custo_unit = st.session_state.produtos_db[codigo].get('preco_custo', 0)
+                            custo_total += custo_unit * item['quantidade']
+                
+                lucro_bruto = receita_total - custo_total
+                margem_lucro = (lucro_bruto / receita_total * 100) if receita_total > 0 else 0
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Receita Total", f"R$ {receita_total:.2f}")
+                with col2:
+                    st.metric("Custo Total", f"R$ {custo_total:.2f}")
+                with col3:
+                    st.metric("Lucro Bruto", f"R$ {lucro_bruto:.2f} ({margem_lucro:.1f}%)")
+                
+                # Gráfico de vendas por forma de pagamento
+                vendas_por_pgto = vendas_mes.groupby("forma_pgto")["total"].sum().reset_index()
+                st.subheader("Vendas por Forma de Pagamento")
+                st.bar_chart(vendas_por_pgto.set_index("forma_pgto"))
+                
+                # Resumo diário
+                st.subheader(f"Resumo Diário - {mes}/{ano}")
+                vendas_por_dia = vendas_mes.groupby(vendas_mes['data_dt'].dt.day)['total'].sum().reset_index()
+                vendas_por_dia.columns = ['Dia', 'Total']
+                st.line_chart(vendas_por_dia.set_index('Dia'))
+                
+                # Tabela completa
+                st.dataframe(vendas_por_dia)
+            else:
+                st.info(f"Nenhuma venda registrada em {mes}/{ano}.")
+        else:
+            st.info("Nenhuma venda registrada no sistema.")
+
+# Menu principal
+def menu_principal():
+    st.sidebar.title("ORION PDV")
+    st.sidebar.image("https://github.com/jesusmjunior/pdv2022/blob/69ff7f9ecaa6209d10cec3ea589f803b56180c32/logo.webp", width=100)
+    
+    opcoes = {
+        "🧾 Registrar Venda": registrar_venda,
+        "📦 Cadastro de Produtos": cadastrar_produto,
+        "👥 Cadastro de Clientes": cadastrar_cliente,
+        "📄 Importar Nota Fiscal": importar_nota_fiscal,
+        "📊 Relatórios": gerar_relatorios,
+        "❓ Ajuda": mostrar_instrucoes_scanner
+    }
+    
+    escolha = st.sidebar.radio("Menu", list(opcoes.keys()))
+    
+    st.sidebar.markdown("---")
+    st.sidebar.info(f"Usuário: {USUARIOS[st.session_state['usuario']]['nome']}")
+    
+    if st.sidebar.button("🚪 Sair"):
+        st.session_state["autenticado"] = False
+        st.session_state["usuario"] = None
+        st.rerun()
+    
+    opcoes[escolha]()
+
+# Programa principal
+def main():
+    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
+        autenticar_usuario()
+    else:
+        menu_principal()
+
+if __name__ == "__main__":
+    main()
