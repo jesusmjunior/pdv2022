@@ -105,6 +105,140 @@ def main():
     else:
         st.warning("Funcionalidade em desenvolvimento")
 
+# Lousa 11 – Sidebar, Navegação e Função Principal do App
+import streamlit as st
+from datetime import datetime
+import pandas as pd
+import uuid
+
+# ----------------------------- REGISTRAR VENDA ----------------------------- #
+def registrar_venda():
+    st.header("🧾 Registrar Venda")
+
+    if not st.session_state.produtos_db:
+        st.warning("Nenhum produto cadastrado. Cadastre produtos primeiro.")
+        return
+
+    st.subheader("Buscar Produto")
+    termo = st.text_input("Digite nome ou código de barras")
+    resultados = []
+    for p in st.session_state.produtos_db.values():
+        if termo.lower() in p["nome"].lower() or termo in p["codigo_barras"]:
+            resultados.append(p)
+
+    for produto in resultados:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            st.image(produto['foto'], width=100)
+        with col2:
+            st.write(f"**{produto['nome']}**")
+            st.write(f"Preço: R$ {produto['preco']:.2f} | Estoque: {produto['estoque']} unidades")
+            qtd = st.number_input("Quantidade", min_value=1, max_value=produto['estoque'], key=produto['codigo_barras'])
+            if st.button("Adicionar", key=f"add_{produto['codigo_barras']}"):
+                item = {
+                    "codigo_barras": produto['codigo_barras'],
+                    "produto": produto['nome'],
+                    "quantidade": qtd,
+                    "preco_unit": produto['preco'],
+                    "total": qtd * produto['preco'],
+                    "foto": produto['foto']
+                }
+                st.session_state.carrinho.append(item)
+                st.session_state.produtos_db[produto['codigo_barras']]['estoque'] -= qtd
+                st.success(f"{qtd}x {produto['nome']} adicionados")
+
+    st.subheader("🛒 Carrinho")
+    total = 0
+    for i, item in enumerate(st.session_state.carrinho):
+        cols = st.columns([2, 4, 2, 2])
+        cols[0].image(item["foto"], width=50)
+        cols[1].write(f"{item['produto']} ({item['quantidade']}x)")
+        cols[2].write(f"R$ {item['total']:.2f}")
+        if cols[3].button("❌", key=f"rm_{i}"):
+            st.session_state.produtos_db[item['codigo_barras']]['estoque'] += item['quantidade']
+            st.session_state.carrinho.pop(i)
+            st.rerun()
+        total += item['total']
+
+    if st.session_state.carrinho:
+        st.markdown(f"### Total: R$ {total:.2f}")
+        with st.form("finalizar"):
+            cliente = st.text_input("Cliente", value="Consumidor Final")
+            forma_pgto = st.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "Pix"])
+            if st.form_submit_button("Finalizar Venda"):
+                venda = {
+                    "id": str(uuid.uuid4())[:8],
+                    "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "cliente": cliente,
+                    "forma_pgto": forma_pgto,
+                    "itens": st.session_state.carrinho.copy(),
+                    "total": total
+                }
+                st.session_state.vendas_db.append(venda)
+                st.session_state.carrinho = []
+                st.success("Venda registrada com sucesso!")
+
+# ----------------------------- SIDEBAR ----------------------------- #
+def sidebar():
+    with st.sidebar:
+        st.image("https://i.imgur.com/Ka8kNST.png", width=200)
+        st.title("ORION PDV")
+
+        pagina = st.selectbox(
+            "Menu Principal",
+            [
+                "🧾 Registrar Venda",
+                "📦 Cadastrar Produto",
+                "👤 Cadastrar Cliente",
+                "📊 Painel Financeiro",
+                "📜 Histórico de Vendas",
+                "🗃️ Gerenciar Estoque",
+                "📥 Importar Produtos via CSV",
+                "⚙️ Configurações",
+                "ℹ️ Sobre"
+            ]
+        )
+
+        st.divider()
+        st.write(f"📅 {datetime.now().strftime('%d/%m/%Y')}")
+        st.write(f"🕒 {datetime.now().strftime('%H:%M:%S')}")
+
+        if "usuario" in st.session_state:
+            st.write(f"👤 Usuário: {st.session_state['usuario']}")
+            if st.button("Sair", type="primary"):
+                st.session_state.clear()
+                st.rerun()
+
+    return pagina
+
+# ----------------------------- MAIN ----------------------------- #
+def main():
+    if "autenticado" not in st.session_state or not st.session_state.autenticado:
+        autenticar_usuario()
+        return
+
+    pagina = sidebar()
+
+    if pagina == "🧾 Registrar Venda":
+        registrar_venda()
+    elif pagina == "📦 Cadastrar Produto":
+        cadastro_produto()
+    elif pagina == "👤 Cadastrar Cliente":
+        cadastro_cliente()
+    elif pagina == "📊 Painel Financeiro":
+        painel_financeiro()
+    elif pagina == "📜 Histórico de Vendas":
+        historico_vendas()
+    elif pagina == "🗃️ Gerenciar Estoque":
+        gerenciar_estoque()
+    elif pagina == "📥 Importar Produtos via CSV":
+        importar_produtos_csv()
+    elif pagina == "⚙️ Configurações":
+        configuracoes_sistema()
+    elif pagina == "ℹ️ Sobre":
+        sobre()
+
 # ----------------------------- EXECUÇÃO ----------------------------- #
 if __name__ == "__main__":
     main()
+
