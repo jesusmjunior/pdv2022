@@ -593,25 +593,6 @@ def painel_financeiro():
         st.warning(f"⚠️ Dados externos não acessíveis: {str(e)}")
 
     vendas_combinadas.extend(st.session_state.vendas_db)# Lousa 1 - Módulo de Configuração e Integração com Google Vision
-
-# Carregamento da chave do serviço (deve estar no mesmo diretório)
-try:
-    with open("zeta-bonbon-424022-b5-691a49c9946f.json") as f:
-        google_vision_credentials = json.load(f)
-except FileNotFoundError:
-    st.error("Arquivo de credenciais do Google Vision não encontrado. Algumas funcionalidades estarão indisponíveis.")
-    google_vision_credentials = {"private_key_id": ""}
-
-# URLS das planilhas
-URLS = {
-    "grupo": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=528868130&single=true&output=csv",
-    "marcas": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=832596780&single=true&output=csv",
-    "cliente": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1645177762&single=true&output=csv",
-    "produto": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1506891785&single=true&output=csv",
-    "pgto": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1061064660&single=true&output=csv",
-    "venda": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS0r3XE4DpzlYJjZwjc2c_pW_K3euooN9caPedtSq-nH_aEPnvx1jrcd9t0Yhg8fqXfR3j5jM2OyUQQ/pub?gid=1817416820&single=true&output=csv"
-}
-
 # Carregamento OCR via Google Vision API
 def extrair_texto_google_vision(imagem_pil):
     # Converte imagem para base64
