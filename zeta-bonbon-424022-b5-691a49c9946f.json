@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "zeta-bonbon-424022-b5",
+  "private_key_id": "691a49c9946f853ce413eacbeefc2c0b0e4b0207",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC6hEdK2mxYW09i\nK0oF2AMrOCK5wYS03Huw/JixtgCVzFywK2fhrSDD+dXJX8+n4xa4Yl3/ELs2mEEI\n+bC5g+ey0cdqD4Ik4DFmN4eUMP3xUC7zUVF1wAQyTuRfcmUAkfyOHl5W5W7F4sJ5\nLM3aTmWS1hinaj+IHgvoc50XD3nALDZeBee5jogbDLHmcjkuEJWmfDBpX+CQL/B0\nWtucK4xO2cfDBvuNDjfyMQU//zDj5fs6nzNfXRC1z8PfKfp5yOr5BksuFdwmA29X\nPKjwhuZSAceSzZ+vFtJW949NYOP9qQDa0x7chSuDHLdJl9NyjAT/gxEmher8awwv\ng+kxB19DAgMBAAECggEACJRGDTjfy+6jR6IzHPKzLp0956pxlrofjGQKB/6Vp05H\noyjT9er3O1x2C3W3QQMui9umdDGKUvgM4cNOcDITicOhdwzwkQ6o5wk92MCqJZvp\nFPMUGqTy7Hd5hLRn1e9hHQ5ji36xKjQEevtnGpgJjwf/CVBXTMUJCi+rNaDWGlM6\nHNwkMg0Ra5zlJA2UxOLlpYhcr2PZR23jsmL1942DXQxifJvKmO2E20iKGZ/u08ew\nPC+Gvd64XTqkiWvLayOw+dU3XfzGWboPaNd3u75+fFWSUVZwMLS1RVogbzLrwHd2\ne7Ebd56H4k+2uqpL5MYcnIyu3EfNGS1HUT+e/wjSEQKBgQDunT+I8Tl4CJ3NgU9/\nLiKk40sxJ5Zm3pcqAmu0SAvwt5wNOJuTokg8RAs5E7bRe1/RAB1ZB+gwrKWS4C3s\nJl1a6m3iEvBy+nlEPWOBT3jLTOvgNavSUNDUVQW+2soNwfiPsNBCkCPnADzqi18Y\n6biOcuASiakk3NSCId3ttjKw0wKBgQDIG0f1NQLcIFVvrEg8MHLiap2462AHfceO\nlbc+jcmsRd0rG0Y8FAk3x60BMYCuPbi8OL5+dsD9FW+CImloZGU55pSScjj08/cc\n4n0tTQwMQgNK8Y40MpbXPDXbCQrYfkAixGStnS8psGJzPp9wF/aLxDGWdTtuRcV1\nq2XYRB0R0QKBgQCRa+pdxk309qNdrHJLm01n2lJoGa1S8lOEOcd0Lvh/8xa7BAXk\n+uE1QW7pkTc5AgzKLly0dtouV/nswo2aP2Nj1j2zq0E5gadITHWJSGrg0/dpRKx7\n1979mPeQcnzz14Rp5iN2fawzy3RUqS4C2+Yrgp1HDvizy5YD3SoJBqJsGwKBgCt6\nwgflnNl3rRi2tntdi5jm0Z58hkEac2Hn5gkRheCIzaWwJ3KmZ9pW6KB5wRwbDSjY\nq4uPAh/7qF7+Wyjzp4sNLvsjFn0jBW6hR9GwDA4dydle4yc0VtItowYU0OZ5iDYF\ntlqC7NyCFuIzmTEiA9AasSugDWnIfz8yHs7+/dIBAoGAFqiRDSxb2Sza5DKEq9WF\nbaz8pKe6DJfJNHzJMnR5YvQtH6DL72MxCv5KTAEIuW8DJC9gUW8RQbG6M3Fa1SPf\npiBH0Sx4M2w/X8Yu1ODUZbxdetkEy4jngNuLwCP57xODl8cF9BBRGJ+6m52moVvp\nMVBNyj2qkuxjydNmuxceerg=\n-----END PRIVATE KEY-----\n",
+  "client_email": "ocr-orion-app@zeta-bonbon-424022-b5.iam.gserviceaccount.com",
+  "client_id": "113225223604970206908",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ocr-orion-app%40zeta-bonbon-424022-b5.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
