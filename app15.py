@@ -1195,3 +1195,27 @@ def painel_financeiro():
         return
         
     #
+    vendas_df = pd.DataFrame([
+        {
+            "ID": v.get("id", ""),
+            "DATA": pd.to_datetime(v.get("data", ""), errors="coerce"),
+            "CLIENTE": v.get("cliente", ""),
+            "PGTO": v.get("forma_pgto", ""),
+            "TOTAL": v.get("total", 0)
+        } for v in vendas_combinadas
+    ])
+
+    vendas_df.dropna(subset=["DATA"], inplace=True)
+
+    total_vendas = len(vendas_df)
+    soma_total = vendas_df["TOTAL"].sum()
+    ticket_medio = vendas_df["TOTAL"].mean()
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🧾 Total de Vendas", f"{total_vendas}")
+    col2.metric("💰 Faturamento", f"R$ {soma_total:.2f}")
+    col3.metric("📈 Ticket Médio", f"R$ {ticket_medio:.2f}")
+
+    with st.expander("📅 Vendas Registradas"):
+        st.dataframe(vendas_df.sort_values("DATA", ascending=False).reset_index(drop=True))
+
